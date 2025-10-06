@@ -2,20 +2,8 @@ job "wuzzy-orchestrator-stage" {
   datacenters = ["mb-hel"]
   type = "service"
 
-  reschedule {
-    attempts = 0
-  }
-
   group "wuzzy-orchestrator-stage-group" {
     count = 1
-
-    update {
-      stagger      = "30s"
-      max_parallel = 1
-      canary       = 1
-      auto_revert  = true
-      auto_promote = true
-    }
 
     network {
       mode = "bridge"
@@ -28,7 +16,7 @@ job "wuzzy-orchestrator-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/memetic-block/wuzzy-orchestrator-stage:${VERSION}"
+        image = "ghcr.io/memetic-block/wuzzy-orchestrator:${VERSION}"
       }
 
       env {
@@ -39,11 +27,11 @@ job "wuzzy-orchestrator-stage" {
 
       template {
         data = <<-EOF
-        {{- range service "wuzzy-orchestrator-stage-redis" }}
+        {{- range service "wuzzy-orchestrator-redis-stage" }}
         REDIS_HOST="{{ .Address }}"
         REDIS_PORT="{{ .Port }}"
         {{- end }}
-        {{- range service "wuzzy-orchestrator-stage-postgres" }}
+        {{- range service "wuzzy-orchestrator-postgres-stage" }}
         DB_HOST="{{ .Address }}"
         DB_PORT="{{ .Port }}"
         {{- end }}
@@ -56,7 +44,7 @@ job "wuzzy-orchestrator-stage" {
 
       template {
         data = <<-EOF
-        {{ with secret "kv/wuzzy/tx-oracle" }}
+        {{ with secret "kv/wuzzy/orchestrator-stage" }}
         DB_USERNAME="{{ .Data.data.DB_USER }}"
         DB_PASSWORD="{{ .Data.data.DB_PASSWORD }}"
         {{ end }}
@@ -65,23 +53,14 @@ job "wuzzy-orchestrator-stage" {
         env = true
       }
 
-      template {
-        data = <<-EOF
-        {{- with secret `kv/wuzzy/tx-oracle` }}
-        {{- base64Decode .Data.data.ORACLE_KEY_BASE64 }}
-        {{- end }}
-        EOF
-        destination = "secrets/oracle_key.json"
-      }
-
       restart {
         attempts = 0
         mode     = "fail"
       }
 
       resources {
-        cpu    = 1024
-        memory = 2048
+        cpu    = 2048
+        memory = 4096
       }
 
       service {
