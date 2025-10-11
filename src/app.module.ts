@@ -20,7 +20,7 @@ import { ArnsRecord } from './arns/schema/arns-record.entity'
       useFactory: (
         config: ConfigService<{
           REDIS_MODE: string
-          REDIS_HOSTNAME: string
+          REDIS_HOST: string
           REDIS_PORT: number
           REDIS_MASTER_NAME: string
           REDIS_SENTINEL_1_HOST: string
@@ -39,7 +39,7 @@ import { ArnsRecord } from './arns/schema/arns-record.entity'
         )
 
         let connection: ConnectionOptions = {
-          host: config.get<string>('REDIS_HOSTNAME', { infer: true }),
+          host: config.get<string>('REDIS_HOST', { infer: true }),
           port: config.get<number>('REDIS_PORT', { infer: true }),
         }
 
@@ -96,7 +96,7 @@ import { ArnsRecord } from './arns/schema/arns-record.entity'
           password: config.get<string>('DB_PASSWORD', { infer: true }),
           database: config.get<string>('DB_NAME', { infer: true }),
           entities: [ ArnsRecord ],
-          synchronize: true // TODO -> Remove in production
+          // synchronize: true // TODO -> Remove in production
         }
       }
     }),

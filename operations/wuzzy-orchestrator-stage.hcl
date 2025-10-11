@@ -22,7 +22,8 @@ job "wuzzy-orchestrator-stage" {
       env {
         VERSION="[[ .commit_sha ]]"
         PORT="${NOMAD_PORT_http}"
-
+        DB_NAME="wuzzy-orchestrator-stage"
+        REDIS_MODE="standalone"
       }
 
       template {
