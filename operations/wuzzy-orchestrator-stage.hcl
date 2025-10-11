@@ -12,6 +12,12 @@ job "wuzzy-orchestrator-stage" {
       }
     }
 
+    volume "wuzzy-orchestrator-stage" {
+      type      = "host"
+      read_only = false
+      source    = "wuzzy-orchestrator-stage"
+    }
+
     task "wuzzy-orchestrator-stage-task" {
       driver = "docker"
 
@@ -19,11 +25,19 @@ job "wuzzy-orchestrator-stage" {
         image = "ghcr.io/memetic-block/wuzzy-orchestrator:${VERSION}"
       }
 
+      volume_mount {
+        volume = "wuzzy-orchestrator-stage"
+        destination = "/usr/src/app/data"
+        read_only = false
+      }
+
       env {
         VERSION="[[ .commit_sha ]]"
         PORT="${NOMAD_PORT_http}"
         DB_NAME="wuzzy-orchestrator-stage"
         REDIS_MODE="standalone"
+        ANT_TARGET_BLACKLIST_FILE="/usr/src/app/data/ant-target-blacklist.txt"
+        ANT_PROCESS_ID_BLACKLIST_FILE="/usr/src/app/data/ant-process-id-blacklist.txt"
       }
 
       template {
