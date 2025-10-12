@@ -252,19 +252,24 @@ export class ArnsService {
         `Found [${records.length}] ARNS records with valid primary targets`
       )
 
-      let crawlConfigDomains = 'domains:\n'
+      const uniqueUrls = new Set<string>()
       records
         .filter(record => !record.undername.includes(' ') && !record.undername.includes('+'))
         .forEach(record => {
           const subdomain = record.undername === '@'
             ? record.name
             : `${record.undername}_${record.name}`
-          crawlConfigDomains += `  - url: `
-            + `https://${encodeURIComponent(subdomain)}.${this.arnsCrawlGateway}\n`
+          const url = `https://${subdomain}.${this.arnsCrawlGateway}`
+          uniqueUrls.add(url)
         })
+
+      let crawlConfigDomains = 'domains:\n'
+      uniqueUrls.forEach(url => {
+        crawlConfigDomains += `  - url: ${url}\n`
+      })
       
       this.logger.log(
-        `Generated crawl domains config with [${records.length}] domains`
+        `Generated crawl domains config with [${uniqueUrls.size}] unique domains`
       )
 
       return crawlConfigDomains
