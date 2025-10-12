@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { ANT, AoARIORead, AoArNSNameDataWithName, ARIO } from '@ar.io/sdk'
 import { Repository, Not, IsNull, And, In } from 'typeorm'
 import { readFileSync } from 'fs'
-import _ from 'lodash'
+import * as _ from 'lodash'
 
 import { ArnsRecord } from './schema/arns-record.entity'
 
