@@ -38,6 +38,7 @@ job "wuzzy-orchestrator-stage" {
         REDIS_MODE="standalone"
         ANT_TARGET_BLACKLIST_FILE="/usr/src/app/data/ant-target-blacklist.txt"
         ANT_PROCESS_ID_BLACKLIST_FILE="/usr/src/app/data/ant-process-id-blacklist.txt"
+        ARNS_CRAWL_GATEWAY="frostor.xyz"
       }
 
       template {

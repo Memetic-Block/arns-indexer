@@ -253,13 +253,14 @@ export class ArnsService {
       )
 
       let crawlConfigDomains = 'domains:\n'
-      records.forEach(record => {
-        const subdomain = record.undername === '@'
-          ? record.name
-          : `${record.undername}_${record.name}`
-        crawlConfigDomains += `  - url: `
-          + `https://${subdomain}.${this.arnsCrawlGateway}\n`
-      })
+      records
+        .forEach(record => {
+          const subdomain = record.undername === '@'
+            ? record.name
+            : `${record.undername}_${record.name}`
+          crawlConfigDomains += `  - url: `
+            + `https://${encodeURIComponent(subdomain)}.${this.arnsCrawlGateway}\n`
+        })
       
       this.logger.log(
         `Generated crawl domains config with [${records.length}] domains`
