@@ -258,13 +258,15 @@ export class ArnsService {
         records
           .filter(
             record => !record.undername.includes(' ') &&
-              !record.undername.includes('+')
+              !record.undername.includes('+') &&
+              !record.name.includes(' ') &&
+              !record.name.includes('+')
           )
           .map(record => {
             const subdomain = record.undername === '@'
               ? record.name
               : `${record.undername}_${record.name}`
-            return `https://${subdomain}.${this.arnsCrawlGateway}`
+            return `https://${subdomain}.${this.arnsCrawlGateway}`.toLowerCase()
           })
       ).forEach(url => {
         crawlConfigDomains += `  - url: ${url}\n`
