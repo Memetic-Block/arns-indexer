@@ -32,6 +32,7 @@ job "wuzzy-orchestrator-stage" {
       }
 
       env {
+        DO_CLEAN="true"
         VERSION="[[ .commit_sha ]]"
         PORT="${NOMAD_PORT_http}"
         DB_NAME="wuzzy-orchestrator-stage"

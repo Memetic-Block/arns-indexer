@@ -254,7 +254,7 @@ export class ArnsService {
 
       let crawlConfigDomains = 'domains:\n'
       records
-        .filter(record => !record.undername.includes(' '))
+        .filter(record => !record.undername.includes(' ') && !record.undername.includes('+'))
         .forEach(record => {
           const subdomain = record.undername === '@'
             ? record.name
