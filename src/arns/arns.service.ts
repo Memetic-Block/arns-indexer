@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { ANT, AoARIORead, AoArNSNameDataWithName, ARIO } from '@ar.io/sdk'
 import { Repository, Not, IsNull, And, In } from 'typeorm'
 import { readFileSync } from 'fs'
+import _ from 'lodash'
 
 import { ArnsRecord } from './schema/arns-record.entity'
 
@@ -252,24 +253,25 @@ export class ArnsService {
         `Found [${records.length}] ARNS records with valid primary targets`
       )
 
-      const uniqueUrls = new Set<string>()
-      records
-        .filter(record => !record.undername.includes(' ') && !record.undername.includes('+'))
-        .forEach(record => {
-          const subdomain = record.undername === '@'
-            ? record.name
-            : `${record.undername}_${record.name}`
-          const url = `https://${subdomain}.${this.arnsCrawlGateway}`
-          uniqueUrls.add(url)
-        })
-
       let crawlConfigDomains = 'domains:\n'
-      uniqueUrls.forEach(url => {
+      _.uniq(
+        records
+          .filter(
+            record => !record.undername.includes(' ') &&
+              !record.undername.includes('+')
+          )
+          .map(record => {
+            const subdomain = record.undername === '@'
+              ? record.name
+              : `${record.undername}_${record.name}`
+            return `https://${subdomain}.${this.arnsCrawlGateway}`
+          })
+      ).forEach(url => {
         crawlConfigDomains += `  - url: ${url}\n`
       })
       
       this.logger.log(
-        `Generated crawl domains config with [${uniqueUrls.size}] unique domains`
+        `Generated crawl domains config with [${records.length}] domains`
       )
 
       return crawlConfigDomains
