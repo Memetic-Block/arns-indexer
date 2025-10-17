@@ -175,6 +175,7 @@ export class ArnsService {
     this.logger.log(`Updating database for [${records.length}] ARNS records`)
 
     for (let i = 0; i < records.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, 1000)) // rate limit 1s
       const record = records[i]
       this.logger.log(
         `Processing record [${i+1}/${records.length}] `
