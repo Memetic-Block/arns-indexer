@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { InjectRepository } from '@nestjs/typeorm'
-import { ANT, AoARIORead, AoArNSNameDataWithName, ARIO } from '@ar.io/sdk'
+import { connect } from '@permaweb/aoconnect'
+import { ANT, AoARIORead, AoArNSNameDataWithName, AOProcess, ARIO } from '@ar.io/sdk'
 import { Repository, Not, IsNull, And, In } from 'typeorm'
 import { readFileSync } from 'fs'
 import * as _ from 'lodash'
@@ -15,12 +16,14 @@ export class ArnsService {
   private readonly antTargetBlacklist: string[]
   private readonly antProcessIdBlacklist: string[]
   private readonly arnsCrawlGateway: string
+  private readonly cuUrl: string
 
   constructor(
     private readonly config: ConfigService<{
       ANT_TARGET_BLACKLIST_FILE: string
       ANT_PROCESS_ID_BLACKLIST_FILE: string
       ARNS_CRAWL_GATEWAY: string
+      CU_URL: string
     }>,
     @InjectRepository(ArnsRecord)
     private arnsRecordsRepository: Repository<ArnsRecord>
@@ -74,6 +77,13 @@ export class ArnsService {
     } else {
       this.logger.warn('No ANT process blacklist file configured')
     }
+
+    this.cuUrl = this.config.get<string>(
+      'CU_URL',
+      'https://cu.ardrive.io',
+      { infer: true }
+    )
+    this.logger.log(`Using CU URL: ${this.cuUrl}`)
   }
 
   public async getArNSRecords(cursor?: string, limit: number = 1000) {
@@ -113,7 +123,15 @@ export class ArnsService {
 
   public async getANTRecords(processId: string) {
     try {
-      return await ANT.init({ processId }).getRecords()
+      return await ANT.init({
+        process: new AOProcess({
+          processId,
+          ao: connect({
+            MODE: 'legacy',
+            CU_URL: this.cuUrl
+          })
+        })
+      }).getRecords()
     } catch (error) {
       this.logger.error(`Failed to fetch ANT records for [${processId}]`, error)
       return null
