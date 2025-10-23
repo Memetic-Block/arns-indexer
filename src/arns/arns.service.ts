@@ -3,7 +3,8 @@ import {
   AoARIORead,
   AoArNSNameDataWithName,
   AOProcess,
-  ARIO
+  ARIO,
+  ARIO_MAINNET_PROCESS_ID
 } from '@ar.io/sdk'
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -38,7 +39,15 @@ export class ArnsService {
     private arnsRecordsRepository: Repository<ArnsRecord>
   ) {
     this.logger.log('Initializing ARIO for mainnet')
-    this.ario = ARIO.mainnet()
+    this.ario = ARIO.mainnet({
+      process: new AOProcess({
+        processId: ARIO_MAINNET_PROCESS_ID,
+        ao: connect({
+          MODE: 'legacy',
+          CU_URL: this.cuUrl
+        })
+      })
+    })
 
     this.arnsCrawlGateway = this.config.get<string>(
       'ARNS_CRAWL_GATEWAY',
