@@ -161,7 +161,6 @@ export class ArnsService {
     await this.arnsRecordsRepository.upsert(dbRecords, ['name'])
   }
 
-
   public async getANTRecords(processId: string) {
     try {
       return await ANT.init({

@@ -1,22 +1,38 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq'
 import { Inject, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { Job } from 'bullmq'
+
 import { ArnsService } from '../../arns/arns.service'
 import { TasksService } from '../tasks.service'
 
 @Processor('tasks-queue')
 export class TasksQueue extends WorkerHost {
-  private readonly logger = new Logger(TasksQueue.name)
-
   public static readonly JOB_DISCOVER_ARNS_RECORDS = 'discover-arns-records'
 
+  private readonly logger = new Logger(TasksQueue.name)
+  private readonly queueTtlMs: number
+
   constructor(
+    private readonly config: ConfigService<{ ARNS_QUEUE_TTL_MS: string }>,
     @Inject()
     private readonly tasksService: TasksService,
     @Inject()
     private readonly arnsService: ArnsService
   ) {
     super()
+
+    const configQueueTtlMs = this.config.get<string>(
+      'ARNS_QUEUE_TTL_MS',
+      '3600000'
+    )
+    const queueTtlMs = parseInt(configQueueTtlMs)
+    if (isNaN(queueTtlMs) || queueTtlMs <= 0) {
+      throw new Error(
+        `ARNS_QUEUE_TTL_MS must be a positive integer, got: ${configQueueTtlMs}`
+      )
+    }
+    this.queueTtlMs = queueTtlMs
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
@@ -33,7 +49,7 @@ export class TasksQueue extends WorkerHost {
           )
         }
 
-        await this.tasksService.queueArnsRecordsDiscovery(3_600_000) // 1h
+        await this.tasksService.queueArnsRecordsDiscovery(this.queueTtlMs)
 
         break
       default:
