@@ -1,4 +1,4 @@
-name: Build & Publish Wuzzy Orchestrator Image
+name: Build & Publish ARNS Indexer Image
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
     tags:
       - v*
 env:
-  IMAGE_NAME: wuzzy-orchestrator
+  IMAGE_NAME: arns-indexer
 
 jobs:
   push:
@@ -56,9 +56,9 @@ jobs:
       # - name: Deploy new version
       #   run: |
       #     if grep -q "stage" deploy-vars.json; then
-      #       sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/wuzzy-site-nginx-stage.hcl
-      #       nomad job run operations/wuzzy-site-nginx-stage.hcl
+      #       sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/arns-indexer-stage.hcl
+      #       nomad job run operations/arns-indexer-stage.hcl
       #     else
-      #       sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/wuzzy-site-nginx-live.hcl
-      #       nomad job run operations/wuzzy-site-nginx-live.hcl
+      #       sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/arns-indexer-live.hcl
+      #       nomad job run operations/arns-indexer-live.hcl
       #     fi

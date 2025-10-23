@@ -1,12 +1,19 @@
+import {
+  ANT,
+  AoARIORead,
+  AoArNSNameDataWithName,
+  AOProcess,
+  ARIO
+} from '@ar.io/sdk'
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { InjectRepository } from '@nestjs/typeorm'
 import { connect } from '@permaweb/aoconnect'
-import { ANT, AoARIORead, AoArNSNameDataWithName, AOProcess, ARIO } from '@ar.io/sdk'
-import { Repository, Not, IsNull, And, In } from 'typeorm'
 import { readFileSync } from 'fs'
 import * as _ from 'lodash'
+import { Repository, Not, IsNull, And, In } from 'typeorm'
 
+import { AntRecord } from './schema/ant-record.entity'
 import { ArnsRecord } from './schema/arns-record.entity'
 
 @Injectable()
@@ -25,6 +32,8 @@ export class ArnsService {
       ARNS_CRAWL_GATEWAY: string
       CU_URL: string
     }>,
+    @InjectRepository(AntRecord)
+    private antRecordsRepository: Repository<AntRecord>,
     @InjectRepository(ArnsRecord)
     private arnsRecordsRepository: Repository<ArnsRecord>
   ) {
@@ -110,7 +119,6 @@ export class ArnsService {
 
     const allRecords: AoArNSNameDataWithName[] = []
     let cursor: string | undefined = undefined
-
     do {
       const result = await this.getArNSRecords(cursor)
       allRecords.push(...result.items)
@@ -120,6 +128,30 @@ export class ArnsService {
 
     return allRecords
   }
+
+  public async updateArnsRecords() {
+    const records = await this.getAllArNSRecords()
+
+    this.logger.log(`Updating database for [${records.length}] ARNS records`)
+    const dbRecords: ArnsRecord[] = []
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i]
+      if (this.antProcessIdBlacklist.includes(record.processId)) {
+        this.logger.warn(
+          `Skipping ARNS record with blacklisted process ID `
+            + `[${record.processId}]`
+        )
+        continue
+      }
+      dbRecords.push(this.arnsRecordsRepository.create(record))
+    }
+
+    this.logger.log(
+      `Upserting [${dbRecords.length}] ARNS records into database`
+    )
+    await this.arnsRecordsRepository.upsert(dbRecords, ['name'])
+  }
+
 
   public async getANTRecords(processId: string) {
     try {
@@ -188,7 +220,7 @@ export class ArnsService {
     return null
   }
 
-  public async updateArnsDatabase() {
+  public async legacy_updateArnsDatabase() {
     const records = await this.getAllArNSRecords()
     this.logger.log(`Updating database for [${records.length}] ARNS records`)
 
@@ -221,13 +253,8 @@ export class ArnsService {
         .keys(antRecords)
         .map(undername => {
           const antRecord = antRecords[undername]
-          return this.arnsRecordsRepository.create({
+          return this.antRecordsRepository.create({
             name: record.name,
-            purchasePrice: record.purchasePrice,
-            startTimestamp: record.startTimestamp,
-            endTimestamp: record.type === 'lease' ? record.endTimestamp : null,
-            type: record.type,
-            undernameLimit: record.undernameLimit,
             processId: record.processId,
             undername,
             transactionId: antRecord.transactionId,
@@ -245,8 +272,8 @@ export class ArnsService {
         `Upserting [${dbRecords.length}] undername records `
           + `for ARNS name [${record.name}]`
       )
-      
-      await this.arnsRecordsRepository.upsert(dbRecords, ['name', 'undername'])
+
+      await this.antRecordsRepository.upsert(dbRecords, ['name', 'undername'])
     }
   }
 
@@ -266,8 +293,8 @@ export class ArnsService {
       if (this.antProcessIdBlacklist.length > 0) {
         where['processId'] = Not(In(this.antProcessIdBlacklist))
       }
-      const records = await this.arnsRecordsRepository.find({ where })
-      
+      const records = await this.antRecordsRepository.find({ where })
+
       this.logger.log(
         `Found [${records.length}] ARNS records with valid primary targets`
       )
@@ -290,7 +317,7 @@ export class ArnsService {
       ).forEach(url => {
         crawlConfigDomains += `  - url: ${url}\n`
       })
-      
+
       this.logger.log(
         `Generated crawl domains config with [${records.length}] domains`
       )

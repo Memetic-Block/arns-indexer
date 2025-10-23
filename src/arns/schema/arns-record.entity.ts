@@ -7,8 +7,10 @@ import {
   Unique
 } from 'typeorm'
 
+export type ArnsRecordType = 'lease' | 'permabuy'
+
 @Entity()
-@Unique([ 'name', 'undername' ])
+@Unique([ 'name' ])
 export class ArnsRecord {
   @PrimaryGeneratedColumn()
   id: number
@@ -34,42 +36,12 @@ export class ArnsRecord {
   @Column({ type: 'bigint', nullable: true })
   startTimestamp: number | null
 
-  @Column({ type: 'bigint', nullable: true })
+  @Column({ type: 'bigint', nullable: true, default: null })
   endTimestamp: number | null
 
-  @Column({ type: 'varchar', nullable: true })
-  type: string | null // 'lease' or 'permabuy'
+  @Column({ type: 'enum' , enum: [ 'lease', 'permabuy' ], nullable: true })
+  type: ArnsRecordType
 
   @Column({ type: 'int', nullable: true })
   undernameLimit: number | null
-
-  /**
-   * ANT Fields
-   */
-  @Column()
-  undername: string
-
-  @Column()
-  transactionId: string
-
-  @Column({ type: 'int' })
-  ttlSeconds: number
-
-  @Column({ type: 'varchar', nullable: true })
-  description: string | null
-
-  @Column({ type: 'int', nullable: true })
-  priority: number | null
-
-  @Column({ type: 'varchar', nullable: true })
-  owner: string | null
-
-  @Column({ type: 'varchar', nullable: true })
-  displayName: string | null
-
-  @Column({ type: 'varchar', nullable: true })
-  logo: string | null
-
-  @Column({ type: 'varchar', array: true, default: [], nullable: true })
-  keywords: string[]
 }

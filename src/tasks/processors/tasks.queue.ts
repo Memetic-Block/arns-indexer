@@ -25,7 +25,7 @@ export class TasksQueue extends WorkerHost {
     switch (job.name) {
       case TasksQueue.JOB_DISCOVER_ARNS_RECORDS:
         try {
-          await this.arnsService.updateArnsDatabase()
+          await this.arnsService.updateArnsRecords()
         } catch (error) {
           this.logger.error(
             `Exception during ARNs records discovery: ${error.message}`,
@@ -33,7 +33,7 @@ export class TasksQueue extends WorkerHost {
           )
         }
 
-        await this.tasksService.queueArnsRecordsDiscovery(86_400_000) // 24h
+        await this.tasksService.queueArnsRecordsDiscovery(3_600_000) // 1h
 
         break
       default:

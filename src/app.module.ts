@@ -8,9 +8,7 @@ import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { ArnsModule } from './arns/arns.module'
 import { TasksModule } from './tasks/tasks.module'
-import { PathManifestsModule } from './path-manifests/path-manifests.module'
-import { ElasticCrawlerModule } from './elastic-crawler/elastic-crawler.module'
-import { ArnsRecord } from './arns/schema/arns-record.entity'
+import { dbEntities } from './db-entities'
 
 @Module({
   imports: [
@@ -86,6 +84,7 @@ import { ArnsRecord } from './arns/schema/arns-record.entity'
           DB_USERNAME: string
           DB_PASSWORD: string
           DB_NAME: string
+          DB_SYNCHRONIZE: string // DO NOT SET THIS TO 'true' IN PRODUCTION!
         }>,
       ) => {
         return {
@@ -95,14 +94,16 @@ import { ArnsRecord } from './arns/schema/arns-record.entity'
           username: config.get<string>('DB_USERNAME', { infer: true }),
           password: config.get<string>('DB_PASSWORD', { infer: true }),
           database: config.get<string>('DB_NAME', { infer: true }),
-          entities: [ ArnsRecord ],
-          // synchronize: true // TODO -> Remove in production
+          entities: dbEntities,
+          synchronize: config.get<string>(
+            'DB_SYNCHRONIZE',
+            { infer: true }
+          ) === 'true',
+          migrations: ['./migrations/*.ts']
         }
       }
     }),
     ArnsModule,
-    PathManifestsModule,
-    ElasticCrawlerModule,
     TasksModule
   ],
   controllers: [ AppController ],

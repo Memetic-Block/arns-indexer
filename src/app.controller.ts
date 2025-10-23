@@ -1,8 +1,8 @@
 import { Controller, Get, Header, StreamableFile } from '@nestjs/common'
+import { Readable } from 'stream'
 
 import { AppService } from './app.service'
 import { ArnsService } from './arns/arns.service'
-import { Readable } from 'stream'
 
 @Controller()
 export class AppController {

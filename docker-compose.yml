@@ -1,0 +1,56 @@
+name: arns-indexer
+
+services:
+  redis:
+    image: redis:7.2
+    container_name: redis
+    ports:
+      - ${REDIS_PORT}:6379
+    volumes:
+      - redisdata:/data
+    command: [ "redis-server" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - ${DB_PORT}:5432
+    volumes:
+      - postgresdata:/var/lib/postgresql/18/docker
+
+  arns-indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arns-indexer
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    ports:
+      - ${PORT}:3000
+    command: [ "node", "dist/main.js" ]
+
+volumes:
+  redisdata:
+    driver: local
+  postgresdata:
+    driver: local
