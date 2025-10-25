@@ -79,8 +79,6 @@ export class ArnsService {
       this.logger.log(
         `Got [${this.antTargetBlacklist.length}] blacklisted ANT targets`
       )
-    } else {
-      this.logger.warn('No ANT target blacklist file configured')
     }
 
     const antProcessIdBlacklistFilePath = this.config
@@ -99,8 +97,6 @@ export class ArnsService {
       this.logger.log(
         `Got [${this.antProcessIdBlacklist.length}] blacklisted ANT process IDs`
       )
-    } else {
-      this.logger.warn('No ANT process blacklist file configured')
     }
   }
 
@@ -239,113 +235,6 @@ export class ArnsService {
           controllers: antState.Controllers
         })
       })
-
-      this.logger.log(
-        `Upserting [${dbRecords.length}] undername records `
-          + `for ArNS name [${record.name}]`
-      )
-
-      await this.antRecordsRepository.upsert(dbRecords, ['name', 'undername'])
-    }
-  }
-
-  public async legacy_resolveAntUndernameTarget(
-    name: string,
-    undername: string = '@',
-    retries: number = 3
-  ): Promise<string | null> {
-    const gateways = ['arweave.net', 'frostor.xyz', 'love4src.com']
-    let attempt = 0
-    while (attempt < retries) {
-      try {
-        this.logger.log(
-          `Fetching ANT ${undername} record target for [${name}], `
-            + `attempt ${attempt + 1}`
-        )
-        const nameWithUndername = undername === '@'
-          ? name
-          : `${undername}_${name}`
-        const response = await fetch(
-          `https://${nameWithUndername}.${gateways[attempt % gateways.length]}`,
-          { method: 'HEAD' }
-        )
-        if (!response.ok) {
-          this.logger.error(
-            `Failed to fetch ANT ${undername} record target for [${name}]: `
-              + `${response.status} ${response.statusText}`
-          )
-          attempt++
-          continue
-        }
-        const resolvedId = response.headers.get('x-arns-resolved-id')
-        if (!resolvedId) {
-          this.logger.error(
-            `Missing x-arns-resolved-id header for [${name}] `
-            + `with undername [${undername}]`
-          )
-          attempt++
-          continue
-        }
-        return resolvedId
-      } catch (error) {
-        this.logger.error(
-          `Failed to fetch ANT primary record target for `
-          + `[${name}], attempt ${attempt + 1}`,
-          error
-        )
-        attempt++
-      }
-    }
-    return null
-  }
-
-  public async legacy_updateArnsDatabase() {
-    const records = await this.getAllArNSRecords()
-    this.logger.log(`Updating database for [${records.length}] ArNS records`)
-
-    for (let i = 0; i < records.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000)) // rate limit 1s
-      const record = records[i]
-      this.logger.log(
-        `Processing record [${i+1}/${records.length}] `
-          + `with name [${record.name}] & processId [${record.processId}]`
-      )
-
-      if (this.antProcessIdBlacklist.includes(record.processId)) {
-        this.logger.warn(
-          `Skipping ArNS record with blacklisted process ID `
-            + `[${record.processId}]`
-        )
-        continue
-      }
-
-      const antRecords = await this.getANTRecords(record.processId)
-      if (!antRecords) {
-        this.logger.warn(
-          `No ANT records found for name [${record.name}] & `
-            + `process ID [${record.processId}]`
-        )
-        continue
-      }
-
-      const dbRecords = Object
-        .keys(antRecords)
-        .map(undername => {
-          const antRecord = antRecords[undername]
-          return this.antRecordsRepository.create({
-            name: record.name,
-            processId: record.processId,
-            undername,
-            transactionId: antRecord.transactionId,
-            ttlSeconds: antRecord.ttlSeconds,
-            description: antRecord.description,
-            priority: antRecord.priority,
-            owner: antRecord.owner,
-            displayName: antRecord.displayName,
-            logo: antRecord.logo,
-            keywords: antRecord.keywords
-          })
-        })
 
       this.logger.log(
         `Upserting [${dbRecords.length}] undername records `

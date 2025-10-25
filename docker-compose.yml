@@ -37,7 +37,6 @@ services:
       - local-cu:/usr/app/tmp
       - ${WALLET_FILE}:/usr/app/cu-wallet.json
 
-
   arns-indexer:
     build:
       context: .
