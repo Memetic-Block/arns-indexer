@@ -6,9 +6,10 @@ import { Job } from 'bullmq'
 import { ArnsService } from '../../arns/arns.service'
 import { TasksService } from '../tasks.service'
 
-@Processor('tasks-queue')
+@Processor('arns-records-discovery-queue')
 export class TasksQueue extends WorkerHost {
   public static readonly JOB_DISCOVER_ARNS_RECORDS = 'discover-arns-records'
+  public static readonly JOB_DISCOVER_ANT_RECORDS = 'discover-ant-records'
 
   private readonly logger = new Logger(TasksQueue.name)
   private readonly queueTtlMs: number
@@ -33,6 +34,7 @@ export class TasksQueue extends WorkerHost {
       )
     }
     this.queueTtlMs = queueTtlMs
+    this.logger.log(`Using ArNS Queue TTL ${this.queueTtlMs} ms`)
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
@@ -41,10 +43,22 @@ export class TasksQueue extends WorkerHost {
     switch (job.name) {
       case TasksQueue.JOB_DISCOVER_ARNS_RECORDS:
         try {
-          await this.arnsService.updateArnsRecords()
+          await this.arnsService.updateArNSRecordsIndex()
         } catch (error) {
           this.logger.error(
             `Exception during ARNs records discovery: ${error.message}`,
+            error.stack
+          )
+        }
+
+        break
+
+      case TasksQueue.JOB_DISCOVER_ANT_RECORDS:
+        try {
+          await this.arnsService.updateANTRecordsIndex()
+        } catch (error) {
+          this.logger.error(
+            `Exception during ANT records discovery: ${error.message}`,
             error.stack
           )
         }

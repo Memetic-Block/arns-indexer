@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq'
-import { Logger, Module } from '@nestjs/common'
+import { Module } from '@nestjs/common'
+
 import { TasksQueue } from './processors/tasks.queue'
 import { TasksService } from './tasks.service'
 import { ArnsModule } from '../arns/arns.module'
@@ -8,8 +9,11 @@ import { ArnsModule } from '../arns/arns.module'
   imports: [
     ArnsModule,
     BullModule.registerQueue({
-      name: 'tasks-queue',
+      name: 'arns-records-discovery-queue',
       streams: { events: { maxLen: 1000 } }
+    }),
+    BullModule.registerFlowProducer({
+      name: 'arns-records-discovery-flow'
     })
   ],
   providers: [TasksService, TasksQueue],

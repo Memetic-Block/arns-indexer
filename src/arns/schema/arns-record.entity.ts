@@ -22,7 +22,7 @@ export class ArnsRecord {
   public updatedAt: Date
 
   /**
-   * ARNS Fields
+   * ArNS Fields
    */
   @Column()
   name: string

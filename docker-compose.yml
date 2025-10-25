@@ -26,6 +26,18 @@ services:
     volumes:
       - postgresdata:/var/lib/postgresql/18/docker
 
+  local-cu:
+    image: ghcr.io/permaweb/ao-cu:d959e784fbf499bc8811063036b1407fc957c2e4
+    environment:
+      WALLET_FILE: /usr/app/cu-wallet.json
+      NODE_CONFIG_ENV: "development"
+    ports:
+      - 6363:6363
+    volumes:
+      - local-cu:/usr/app/tmp
+      - ${WALLET_FILE}:/usr/app/cu-wallet.json
+
+
   arns-indexer:
     build:
       context: .
@@ -53,4 +65,6 @@ volumes:
   redisdata:
     driver: local
   postgresdata:
+    driver: local
+  local-cu:
     driver: local

@@ -1,7 +1,9 @@
 import { InjectQueue, InjectFlowProducer } from '@nestjs/bullmq'
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { Queue, FlowProducer, FlowJob } from 'bullmq'
+import { Queue, FlowProducer } from 'bullmq'
+
+import { TasksQueue } from './processors/tasks.queue'
 
 @Injectable()
 export class TasksService implements OnApplicationBootstrap {
@@ -18,13 +20,15 @@ export class TasksService implements OnApplicationBootstrap {
       DO_CLEAN: string
       VERSION: string
     }>,
-    @InjectQueue('tasks-queue')
-    public tasksQueue: Queue
+    @InjectQueue('arns-records-discovery-queue')
+    public arnsRecordsDiscoveryQueue: Queue,
+    @InjectFlowProducer('arns-records-discovery-flow')
+    public arnsRecordsDiscoveryFlow: FlowProducer
   ) {
     this.doClean = this.config.get<string>('DO_CLEAN', { infer: true })
     const version = this.config.get<string>('VERSION', { infer: true })
     this.logger.log(
-      `Starting Tasks service for ARNS Indexer version: ${version}`
+      `Starting Tasks service for ArNS Indexer version: ${version}`
     )
   }
 
@@ -32,7 +36,7 @@ export class TasksService implements OnApplicationBootstrap {
     if (this.doClean === 'true') {
       this.logger.log('Cleaning up tasks queue because DO_CLEAN is true')
       try {
-        await this.tasksQueue.obliterate({ force: true })
+        await this.arnsRecordsDiscoveryQueue.obliterate({ force: true })
       } catch (error) {
         this.logger.error(
           `Failed cleaning up queues: ${error.message}`,
@@ -58,17 +62,31 @@ export class TasksService implements OnApplicationBootstrap {
     )
 
     try {
-      await this.tasksQueue.add('discover-arns-records', {}, {
-        ...TasksService.DEFAULT_JOB_OPTS,
-        delay
+      await this.arnsRecordsDiscoveryFlow.add({
+        name: TasksQueue.JOB_DISCOVER_ANT_RECORDS,
+        queueName: 'arns-records-discovery-queue',
+        opts: {
+          ...TasksService.DEFAULT_JOB_OPTS
+        },
+        children: [
+          {
+            name: TasksQueue.JOB_DISCOVER_ARNS_RECORDS,
+            queueName: 'arns-records-discovery-queue',
+            opts: {
+              delay,
+              ...TasksService.DEFAULT_JOB_OPTS
+            }
+          }
+        ]
       })
+
       this.logger.log(
         `[alarm=enqueued-arns-records-discovery] ` +
-          `Enqueued ARNs records discovery job`
+          `Enqueued ArNS records discovery job`
       )
     } catch (error) {
       this.logger.error(
-        `Failed adding ARNs records discovery job to queue: ` +
+        `Failed adding ArNS records discovery job to queue: ` +
           `${error.message}`,
         error.stack
       )

@@ -38,6 +38,13 @@ export class ArnsService {
     @InjectRepository(ArnsRecord)
     private arnsRecordsRepository: Repository<ArnsRecord>
   ) {
+    this.cuUrl = this.config.get<string>(
+      'CU_URL',
+      'https://cu.ardrive.io',
+      { infer: true }
+    )
+    this.logger.log(`Using CU URL: ${this.cuUrl}`)
+
     this.logger.log('Initializing ARIO for mainnet')
     this.ario = ARIO.mainnet({
       process: new AOProcess({
@@ -54,7 +61,7 @@ export class ArnsService {
       'arweave.net',
       { infer: true }
     )
-    this.logger.log(`Using ARNS crawl gateway: ${this.arnsCrawlGateway}`)
+    this.logger.log(`Using ArNS crawl gateway: ${this.arnsCrawlGateway}`)
 
     const antTargetBlacklistFilePath = this.config
       .get<string>('ANT_TARGET_BLACKLIST_FILE', '', { infer: true })
@@ -95,18 +102,11 @@ export class ArnsService {
     } else {
       this.logger.warn('No ANT process blacklist file configured')
     }
-
-    this.cuUrl = this.config.get<string>(
-      'CU_URL',
-      'https://cu.ardrive.io',
-      { infer: true }
-    )
-    this.logger.log(`Using CU URL: ${this.cuUrl}`)
   }
 
   public async getArNSRecords(cursor?: string, limit: number = 1000) {
     this.logger.log(
-      `Fetching ARNS records using cursor [${cursor}] and limit [${limit}]`
+      `Fetching ArNS records using cursor [${cursor}] and limit [${limit}]`
     )
     try {
       const records = await this.ario.getArNSRecords({
@@ -115,16 +115,16 @@ export class ArnsService {
         sortOrder: 'asc',
         cursor
       })
-      this.logger.log(`Fetched [${records.items.length}] ARNS records`)
+      this.logger.log(`Fetched [${records.items.length}] ArNS records`)
       return records
     } catch (error) {
-      this.logger.error('Failed to fetch ARNS records', error)
+      this.logger.error('Failed to fetch ArNS records', error)
       throw error
     }
   }
 
   public async getAllArNSRecords() {
-    this.logger.log('Fetching all ARNS records')
+    this.logger.log('Fetching all ArNS records')
 
     const allRecords: AoArNSNameDataWithName[] = []
     let cursor: string | undefined = undefined
@@ -138,16 +138,16 @@ export class ArnsService {
     return allRecords
   }
 
-  public async updateArnsRecords() {
+  public async updateArNSRecordsIndex() {
     const records = await this.getAllArNSRecords()
 
-    this.logger.log(`Updating database for [${records.length}] ARNS records`)
+    this.logger.log(`Updating database for [${records.length}] ArNS records`)
     const dbRecords: ArnsRecord[] = []
     for (let i = 0; i < records.length; i++) {
       const record = records[i]
       if (this.antProcessIdBlacklist.includes(record.processId)) {
         this.logger.warn(
-          `Skipping ARNS record with blacklisted process ID `
+          `Skipping ArNS record with blacklisted process ID `
             + `[${record.processId}]`
         )
         continue
@@ -156,7 +156,7 @@ export class ArnsService {
     }
 
     this.logger.log(
-      `Upserting [${dbRecords.length}] ARNS records into database`
+      `Upserting [${dbRecords.length}] ArNS records into database`
     )
     await this.arnsRecordsRepository.upsert(dbRecords, ['name'])
   }
@@ -178,7 +178,78 @@ export class ArnsService {
     }
   }
 
-  public async resolveAntUndernameTarget(
+  public async getANTState(processId: string) {
+    try {
+      return await ANT.init({
+        process: new AOProcess({
+          processId,
+          ao: connect({
+            MODE: 'legacy',
+            CU_URL: this.cuUrl
+          })
+        })
+      }).getState()
+    } catch (error) {
+      this.logger.error(`Failed to fetch ANT state for [${processId}]`, error)
+      return null
+    }
+  }
+
+  public async updateANTRecordsIndex() {
+    const records = await this.arnsRecordsRepository.find({ take: 5 })
+    this.logger.log(`Updating ANT records for [${records.length}] ArNS records`)
+
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i]
+      this.logger.log(
+        `Processing record [${i+1}/${records.length}] `
+          + `with name [${record.name}] & processId [${record.processId}]`
+      )
+
+      if (this.antProcessIdBlacklist.includes(record.processId)) {
+        this.logger.warn(
+          `Skipping ANT record with blacklisted process ID `
+            + `[${record.processId}]`
+        )
+        continue
+      }
+
+      const antState = await this.getANTState(record.processId)
+      if (!antState) {
+        this.logger.warn(
+          `No ANT records found for name [${record.name}] & `
+            + `process ID [${record.processId}]`
+        )
+        continue
+      }
+
+      const dbRecords = Object.keys(antState.Records).map(undername => {
+        return this.antRecordsRepository.create({
+          name: record.name,
+          processId: record.processId,
+          undername,
+          transactionId: antState.Records[undername].transactionId,
+          ttlSeconds: antState.Records[undername].ttlSeconds,
+          description: antState.Records[undername].description,
+          priority: antState.Records[undername].priority,
+          owner: antState.Records[undername].owner,
+          displayName: antState.Records[undername].displayName,
+          logo: antState.Records[undername].logo,
+          keywords: antState.Records[undername].keywords,
+          controllers: antState.Controllers
+        })
+      })
+
+      this.logger.log(
+        `Upserting [${dbRecords.length}] undername records `
+          + `for ArNS name [${record.name}]`
+      )
+
+      await this.antRecordsRepository.upsert(dbRecords, ['name', 'undername'])
+    }
+  }
+
+  public async legacy_resolveAntUndernameTarget(
     name: string,
     undername: string = '@',
     retries: number = 3
@@ -230,7 +301,7 @@ export class ArnsService {
 
   public async legacy_updateArnsDatabase() {
     const records = await this.getAllArNSRecords()
-    this.logger.log(`Updating database for [${records.length}] ARNS records`)
+    this.logger.log(`Updating database for [${records.length}] ArNS records`)
 
     for (let i = 0; i < records.length; i++) {
       await new Promise(resolve => setTimeout(resolve, 1000)) // rate limit 1s
@@ -242,7 +313,7 @@ export class ArnsService {
 
       if (this.antProcessIdBlacklist.includes(record.processId)) {
         this.logger.warn(
-          `Skipping ARNS record with blacklisted process ID `
+          `Skipping ArNS record with blacklisted process ID `
             + `[${record.processId}]`
         )
         continue
@@ -278,14 +349,14 @@ export class ArnsService {
 
       this.logger.log(
         `Upserting [${dbRecords.length}] undername records `
-          + `for ARNS name [${record.name}]`
+          + `for ArNS name [${record.name}]`
       )
 
       await this.antRecordsRepository.upsert(dbRecords, ['name', 'undername'])
     }
   }
 
-  public async generateCrawlDomainsConfigFile() {
+  public async legacy_generateCrawlDomainsConfigFile() {
     this.logger.log('Generating crawl domains config file from database')
 
     try {
@@ -304,7 +375,7 @@ export class ArnsService {
       const records = await this.antRecordsRepository.find({ where })
 
       this.logger.log(
-        `Found [${records.length}] ARNS records with valid primary targets`
+        `Found [${records.length}] ArNS records with valid primary targets`
       )
 
       let crawlConfigDomains = 'domains:\n'

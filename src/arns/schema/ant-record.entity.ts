@@ -20,7 +20,7 @@ export class AntRecord {
   public updatedAt: Date
 
   /**
-   * ARNS Fields
+   * ArNS Fields
    */
   @Column()
   name: string
@@ -57,4 +57,7 @@ export class AntRecord {
 
   @Column({ type: 'varchar', array: true, default: [], nullable: true })
   keywords: string[]
+
+  @Column({ type: 'varchar', array: true, default: [], nullable: true })
+  controllers: string[]
 }

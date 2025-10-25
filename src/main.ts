@@ -9,9 +9,9 @@ async function bootstrap() {
 
 bootstrap()
   .then(() => {
-    console.log(`ARNS Indexer is running on port ${process.env.PORT ?? 3000}`)
+    console.log(`ArNS Indexer is running on port ${process.env.PORT ?? 3000}`)
   })
   .catch((error) => {
-    console.error('Error starting ARNS Indexer:', error)
+    console.error('Error starting ArNS Indexer:', error)
     process.exit(1)
   })
