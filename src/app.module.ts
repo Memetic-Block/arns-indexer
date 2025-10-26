@@ -93,13 +93,13 @@ import { AddControllersToAntRecordTable1761423495919 } from './migrations/176142
         const logger = new Logger(AppModule.name)
 
         const synchronize = config.get<string>(
-            'DB_SYNCHRONIZE',
-            { infer: true }
-          ) === 'true'
+          'DB_SYNCHRONIZE',
+          { infer: true }
+        ) === 'true'
         const migrationsRun = config.get<string>(
-            'DB_MIGRATIONS_RUN',
-            { infer: true }
-          ) === 'true'
+          'DB_MIGRATIONS_RUN',
+          { infer: true }
+        ) === 'true'
 
         logger.log(`DB_SYNCHRONIZE: ${synchronize}`)
         logger.log(`DB_MIGRATIONS_RUN: ${migrationsRun}`)

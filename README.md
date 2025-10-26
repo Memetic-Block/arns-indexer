@@ -1,35 +1,29 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
-
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+# ArNS Indexer
+ArNS Indexer is an indexer microservice for [ArNS](https://github.com/ar-io).
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Have you ever wanted to have a live index of all ArNS records including undernames?
+
+Do you have [byte lust](https://x.com/vilenarios/status/1979643531141505316)?
+
+Well look no further!  ArNS Indexer is a microservice built on the NestJS framework and features a queue to:
+
+1) Fetch all ArNS records
+2) Fetch all ANT records (& controllers)
+
+ArNS Indexer serves as a data bridge between legacy AO and hyper-aos while ArNS processes remain accessible only on legacynet.  Eventually, this will be replaced by dedicated hyper-aos processes or a hyperbeam device.
 
 ## Project setup
 
 ```bash
 $ npm install
 ```
+
+## Requirements
+- Redis (manages the task queue)
+- Postgres (stores records)
+- [AO Compute Unit](https://github.com/permaweb/ao) (to resolve AO ArNS requests)
 
 ## Compile and run the project
 
@@ -43,6 +37,41 @@ $ npm run start:dev
 # production mode
 $ npm run start:prod
 ```
+
+## Environment
+### Runtime
+- `PORT` - The port you want ArNS Indexer to run on (for healthchecks)
+- `DO_CLEAN` - `true` or `false` (default)
+  on startup, ArNS Indexer will wipe the task queue
+
+### AO Compute Unit
+- `CU_URL` - The URL for the Compute Unit the indexer will use to resolve records.  As ArNS Indexer uses the ar.io sdk, this defaults to `https://cu.ardrive.io`.  It is strongly encouraged to run your own CU as to 1) not spam the ardrive CU and 2) ensure records have a good chance to resolve as you will have control over the behavior of the CU (such as taking snapshots)
+
+### Redis
+- `REDIS_MODE` - `standalone` or `sentinel` (for sentinel clusters)
+
+#### Standalone
+- `REDIS_HOST` - redis hostname
+- `REDIS_PORT` - redis port
+
+#### Sentinel
+- `REDIS_MASTER_NAME` - redis master node name
+- `REDIS_SENTINEL_1_HOST` - redis sentinel 1 host
+- `REDIS_SENTINEL_1_PORT` - redis sentinel 1 port
+- `REDIS_SENTINEL_2_HOST` - redis sentinel 2 host
+- `REDIS_SENTINEL_2_PORT` - redis sentinel 2 port
+- `REDIS_SENTINEL_3_HOST` - redis sentinel 3 host
+- `REDIS_SENTINEL_3_PORT` - redis sentinal 3 port
+
+### Postgres
+- `DB_HOST` - postres host
+- `DB_PORT` - postgres port
+- `DB_NAME` - db name to use
+- `DB_USERNAME` - postres user
+- `DB_PASSWORD` - postgres password
+- `DB_MIGRATIONS_RUN` - This should be set to `true` in production environments
+so that db migrations run on startup
+- `DB_SYNCHRONIZE` - Sync the database with entity classes on startup. This should **NOT** be set to `true` in production environments as it can potentially wipe data as it reconfigures tables in the db to match entity classes.  This is convenient to use while developing locally.
 
 ## Run tests
 
@@ -59,47 +88,28 @@ $ npm run test:cov
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+There are Nomad templates in the [operations](./operations) directory that provide an example of how to run ArNS Indexer as a Docker container.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Additionally, the [Dockerfile](./Dockerfile) is an example of how to run ArNS Indexer in production environments.
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+## Creating DB Migrations
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-
-## DB Migrations
+### 1) Run the typeorm CLI to generate schema from an entity that has changed
 ```bash
 npm run typeorm -- migration:generate \
   -d ./db-migrations-data-source.ts \
   ./migrations/<MigrationName>
+```
+This will generate a new migration in [src/migrations](./src/migrations) prepended by a timestamp.
+
+### 2) Add the generated migration class to [app.module.ts](./src/app.module.ts) in the `migrations` list:
+
+```typescript
+...
+migrations: [
+  CreateArnsAndAntRecordsTables1761260838990,
+  AddControllersToAntRecordTable1761423495919,
+  <MigrationName<Timestamp>>
+]
+...
 ```
