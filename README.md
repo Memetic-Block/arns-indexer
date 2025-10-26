@@ -43,6 +43,7 @@ $ npm run start:prod
 - `PORT` - The port you want ArNS Indexer to run on (for healthchecks)
 - `DO_CLEAN` - `true` or `false` (default)
   on startup, ArNS Indexer will wipe the task queue
+- `ARNS_QUEUE_TTL_MS` - The cadence of the ArNS records discovery queue (defaults to 86400000 (1 day))
 
 ### AO Compute Unit
 - `CU_URL` - The URL for the Compute Unit the indexer will use to resolve records.  As ArNS Indexer uses the ar.io sdk, this defaults to `https://cu.ardrive.io`.  It is strongly encouraged to run your own CU as to 1) not spam the ardrive CU and 2) ensure records have a good chance to resolve as you will have control over the behavior of the CU (such as taking snapshots)

@@ -25,7 +25,7 @@ export class TasksQueue extends WorkerHost {
 
     const configQueueTtlMs = this.config.get<string>(
       'ARNS_QUEUE_TTL_MS',
-      '3600000'
+      '86400000'
     )
     const queueTtlMs = parseInt(configQueueTtlMs)
     if (isNaN(queueTtlMs) || queueTtlMs <= 0) {
