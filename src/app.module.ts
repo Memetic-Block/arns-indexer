@@ -88,6 +88,20 @@ import { dbEntities } from './db-entities'
           DB_MIGRATIONS_RUN: string
         }>,
       ) => {
+        const logger = new Logger(AppModule.name)
+
+        const synchronize = config.get<string>(
+            'DB_SYNCHRONIZE',
+            { infer: true }
+          ) === 'true'
+        const migrationsRun = config.get<string>(
+            'DB_MIGRATIONS_RUN',
+            { infer: true }
+          ) === 'true'
+
+        logger.log(`DB_SYNCHRONIZE: ${synchronize}`)
+        logger.log(`DB_MIGRATIONS_RUN: ${migrationsRun}`)
+
         return {
           type: 'postgres',
           host: config.get<string>('DB_HOST', { infer: true }),
