@@ -102,7 +102,7 @@ npm run typeorm -- migration:generate \
 ```
 This will generate a new migration in [src/migrations](./src/migrations) prepended by a timestamp.
 
-### 2) Add the generated migration class to [app.module.ts](./src/app.module.ts) in the `migrations` list:
+### 2) Add the generated migration class to [app.module.ts](./src/app.module.ts) in the `migrations` list
 
 ```typescript
 ...
@@ -117,7 +117,8 @@ migrations: [
 ## Future Work
 1) Track ANT resolution failures in the database
 2) Archive ArNS and ANT records that expire
-3) Add postgres cluster support
+3) Runtime cluster support
+4) Postgres cluster support
 
 ## Contributing
 Feel free to open a pull request!
