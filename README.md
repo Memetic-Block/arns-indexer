@@ -113,3 +113,11 @@ migrations: [
 ]
 ...
 ```
+
+## Future Work
+1) Track ANT resolution failures in the database
+2) Archive ArNS and ANT records that expire
+3) Add postgres cluster support
+
+## Contributing
+Feel free to open a pull request!
