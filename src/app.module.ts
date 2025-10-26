@@ -9,6 +9,8 @@ import { AppService } from './app.service'
 import { ArnsModule } from './arns/arns.module'
 import { TasksModule } from './tasks/tasks.module'
 import { dbEntities } from './db-entities'
+import { CreateArnsAndAntRecordsTables1761260838990 } from './migrations/1761260838990-CreateArnsAndAntRecordsTables'
+import { AddControllersToAntRecordTable1761423495919 } from './migrations/1761423495919-AddControllersToAntRecordTable'
 
 @Module({
   imports: [
@@ -114,7 +116,10 @@ import { dbEntities } from './db-entities'
             'DB_SYNCHRONIZE',
             { infer: true }
           ) === 'true',
-          migrations: ['./migrations/*.ts'],
+          migrations: [
+            CreateArnsAndAntRecordsTables1761260838990,
+            AddControllersToAntRecordTable1761423495919
+          ],
           migrationsRun: config.get<string>(
             'DB_MIGRATIONS_RUN',
             { infer: true }
