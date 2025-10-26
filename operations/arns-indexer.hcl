@@ -1,8 +1,8 @@
-job "arns-indexer-live" {
+job "arns-indexer" {
   datacenters = ["mb-hel"]
   type = "service"
 
-  group "arns-indexer-live-group" {
+  group "arns-indexer-group" {
     count = 1
 
     network {
@@ -12,13 +12,13 @@ job "arns-indexer-live" {
       }
     }
 
-    volume "arns-indexer-live" {
+    volume "arns-indexer" {
       type      = "host"
       read_only = false
-      source    = "arns-indexer-live"
+      source    = "arns-indexer"
     }
 
-    task "arns-indexer-live-task" {
+    task "arns-indexer-task" {
       driver = "docker"
 
       config {
@@ -26,33 +26,34 @@ job "arns-indexer-live" {
       }
 
       volume_mount {
-        volume = "arns-indexer-live"
+        volume = "arns-indexer"
         destination = "/usr/src/app/data"
         read_only = false
       }
 
       env {
-        DO_CLEAN="true"
         VERSION="[[ .commit_sha ]]"
         PORT="${NOMAD_PORT_http}"
-        DB_NAME="arns-indexer-live"
+        DB_NAME="arns_indexer"
         REDIS_MODE="standalone"
         ANT_TARGET_BLACKLIST_FILE="/usr/src/app/data/ant-target-blacklist.txt"
         ANT_PROCESS_ID_BLACKLIST_FILE="/usr/src/app/data/ant-process-id-blacklist.txt"
         ARNS_CRAWL_GATEWAY="frostor.xyz"
+        DO_CLEAN="true"
+        DB_MIGRATIONS_RUN="true"
       }
 
       template {
         data = <<-EOF
-        {{- range service "arns-indexer-redis-live" }}
+        {{- range service "arns-indexer-redis" }}
         REDIS_HOST="{{ .Address }}"
         REDIS_PORT="{{ .Port }}"
         {{- end }}
-        {{- range service "arns-indexer-postgres-live" }}
+        {{- range service "arns-indexer-postgres" }}
         DB_HOST="{{ .Address }}"
         DB_PORT="{{ .Port }}"
         {{- end }}
-        {{- range service "wuzzy-cu" }}
+        {{- range service "arns-indexer-cu" }}
         CU_URL="http://{{ .Address }}:{{ .Port }}"
         {{- end }}
         EOF
@@ -60,11 +61,11 @@ job "arns-indexer-live" {
         destination = "local/config.env"
       }
 
-      vault { policies = [ "arns-indexer-live" ] }
+      vault { policies = [ "wuzzy-arns-indexer-postgres" ] }
 
       template {
         data = <<-EOF
-        {{ with secret "kv/wuzzy/arns-indexer-live" }}
+        {{ with secret "kv/wuzzy/arns-indexer/postgres" }}
         DB_USERNAME="{{ .Data.data.DB_USER }}"
         DB_PASSWORD="{{ .Data.data.DB_PASSWORD }}"
         {{ end }}
@@ -84,10 +85,11 @@ job "arns-indexer-live" {
       }
 
       service {
-        name = "arns-indexer-live"
+        name = "arns-indexer"
         port = "http"
 
         check {
+          name     = "arns-indexer-http-check"
           type     = "http"
           path     = "/"
           interval = "10s"

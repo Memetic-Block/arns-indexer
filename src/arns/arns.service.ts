@@ -192,7 +192,7 @@ export class ArnsService {
   }
 
   public async updateANTRecordsIndex() {
-    const records = await this.arnsRecordsRepository.find({ take: 5 })
+    const records = await this.arnsRecordsRepository.find()
     this.logger.log(`Updating ANT records for [${records.length}] ArNS records`)
 
     for (let i = 0; i < records.length; i++) {
@@ -201,14 +201,6 @@ export class ArnsService {
         `Processing record [${i+1}/${records.length}] `
           + `with name [${record.name}] & processId [${record.processId}]`
       )
-
-      if (this.antProcessIdBlacklist.includes(record.processId)) {
-        this.logger.warn(
-          `Skipping ANT record with blacklisted process ID `
-            + `[${record.processId}]`
-        )
-        continue
-      }
 
       const antState = await this.getANTState(record.processId)
       if (!antState) {

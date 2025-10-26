@@ -85,6 +85,7 @@ import { dbEntities } from './db-entities'
           DB_PASSWORD: string
           DB_NAME: string
           DB_SYNCHRONIZE: string // DO NOT SET THIS TO 'true' IN PRODUCTION!
+          DB_MIGRATIONS_RUN: string
         }>,
       ) => {
         return {
@@ -99,7 +100,11 @@ import { dbEntities } from './db-entities'
             'DB_SYNCHRONIZE',
             { infer: true }
           ) === 'true',
-          migrations: ['./migrations/*.ts']
+          migrations: ['./migrations/*.ts'],
+          migrationsRun: config.get<string>(
+            'DB_MIGRATIONS_RUN',
+            { infer: true }
+          ) === 'true',
         }
       }
     }),
