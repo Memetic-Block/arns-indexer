@@ -38,7 +38,7 @@ job "arns-indexer" {
         REDIS_MODE="standalone"
         ANT_TARGET_BLACKLIST_FILE="/usr/src/app/data/ant-target-blacklist.txt"
         ANT_PROCESS_ID_BLACKLIST_FILE="/usr/src/app/data/ant-process-id-blacklist.txt"
-        ARNS_CRAWL_GATEWAY="frostor.xyz"
+        ARNS_CRAWL_GATEWAY="arweave.net"
         DO_CLEAN="true"
         DB_MIGRATIONS_RUN="true"
       }
