@@ -26,6 +26,15 @@ services:
     volumes:
       - postgresdata:/var/lib/postgresql/18/docker
 
+  postgres-ephemeral:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - ${DB_PORT}:5432
+
   local-cu:
     image: ghcr.io/permaweb/ao-cu:d959e784fbf499bc8811063036b1407fc957c2e4
     environment:
