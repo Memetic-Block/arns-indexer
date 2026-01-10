@@ -12,10 +12,12 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { connect } from '@permaweb/aoconnect'
 import { readFileSync } from 'fs'
 import * as _ from 'lodash'
-import { Repository, Not, IsNull, And, In } from 'typeorm'
+import { Repository, Not, IsNull, And, In, LessThan, DataSource } from 'typeorm'
 
 import { AntRecord } from './schema/ant-record.entity'
+import { AntRecordArchive } from './schema/ant-record-archive.entity'
 import { ArnsRecord } from './schema/arns-record.entity'
+import { ArnsRecordArchive } from './schema/arns-record-archive.entity'
 
 @Injectable()
 export class ArnsService {
@@ -33,10 +35,15 @@ export class ArnsService {
       ARNS_CRAWL_GATEWAY: string
       CU_URL: string
     }>,
+    private readonly dataSource: DataSource,
     @InjectRepository(AntRecord)
     private antRecordsRepository: Repository<AntRecord>,
+    @InjectRepository(AntRecordArchive)
+    private antRecordsArchiveRepository: Repository<AntRecordArchive>,
     @InjectRepository(ArnsRecord)
-    private arnsRecordsRepository: Repository<ArnsRecord>
+    private arnsRecordsRepository: Repository<ArnsRecord>,
+    @InjectRepository(ArnsRecordArchive)
+    private arnsRecordsArchiveRepository: Repository<ArnsRecordArchive>
   ) {
     this.cuUrl = this.config.get<string>(
       'CU_URL',
@@ -235,6 +242,109 @@ export class ArnsService {
 
       await this.antRecordsRepository.upsert(dbRecords, ['name', 'undername'])
     }
+  }
+
+  public async archiveExpiredRecords(): Promise<{
+    arnsArchived: number
+    antArchived: number
+  }> {
+    const now = Date.now()
+    this.logger.log(`Starting expired records cleanup at timestamp [${now}]`)
+
+    // Find expired ArNS records (leases with endTimestamp in the past)
+    const expiredArnsRecords = await this.arnsRecordsRepository.find({
+      where: {
+        type: 'lease',
+        endTimestamp: LessThan(now)
+      }
+    })
+
+    if (expiredArnsRecords.length === 0) {
+      this.logger.log('No expired ArNS records found')
+      return { arnsArchived: 0, antArchived: 0 }
+    }
+
+    const expiredNames = expiredArnsRecords.map(r => r.name)
+    this.logger.log(
+      `Found [${expiredArnsRecords.length}] expired ArNS records: ` +
+        `[${expiredNames.slice(0, 10).join(', ')}${expiredNames.length > 10 ? '...' : ''}]`
+    )
+
+    // Find associated ANT records
+    const expiredAntRecords = await this.antRecordsRepository.find({
+      where: { name: In(expiredNames) }
+    })
+
+    this.logger.log(
+      `Found [${expiredAntRecords.length}] associated ANT records to archive`
+    )
+
+    // Perform archive and delete in a single transaction
+    const result = await this.dataSource.transaction(async manager => {
+      // Archive ANT records first
+      if (expiredAntRecords.length > 0) {
+        const antArchiveRecords = expiredAntRecords.map(record =>
+          manager.create(AntRecordArchive, {
+            archiveReason: 'expired',
+            originalId: record.id,
+            originalCreatedAt: record.createdAt,
+            originalUpdatedAt: record.updatedAt,
+            name: record.name,
+            processId: record.processId,
+            undername: record.undername,
+            transactionId: record.transactionId,
+            ttlSeconds: record.ttlSeconds,
+            description: record.description,
+            priority: record.priority,
+            owner: record.owner,
+            displayName: record.displayName,
+            logo: record.logo,
+            keywords: record.keywords,
+            controllers: record.controllers
+          })
+        )
+        await manager.save(AntRecordArchive, antArchiveRecords)
+      }
+
+      // Archive ArNS records
+      const arnsArchiveRecords = expiredArnsRecords.map(record =>
+        manager.create(ArnsRecordArchive, {
+          archiveReason: 'expired',
+          originalId: record.id,
+          originalCreatedAt: record.createdAt,
+          originalUpdatedAt: record.updatedAt,
+          name: record.name,
+          processId: record.processId,
+          purchasePrice: record.purchasePrice,
+          startTimestamp: record.startTimestamp,
+          endTimestamp: record.endTimestamp,
+          type: record.type,
+          undernameLimit: record.undernameLimit
+        })
+      )
+      await manager.save(ArnsRecordArchive, arnsArchiveRecords)
+
+      // Delete ANT records first (no FK, but logical ordering)
+      if (expiredAntRecords.length > 0) {
+        await manager.delete(AntRecord, { name: In(expiredNames) })
+      }
+
+      // Delete ArNS records
+      await manager.delete(ArnsRecord, { name: In(expiredNames) })
+
+      return {
+        arnsArchived: expiredArnsRecords.length,
+        antArchived: expiredAntRecords.length
+      }
+    })
+
+    this.logger.log(
+      `[alarm=archived-expired-records] Archived ` +
+        `[${result.arnsArchived}] ArNS records and ` +
+        `[${result.antArchived}] ANT records`
+    )
+
+    return result
   }
 
   public async legacy_generateCrawlDomainsConfigFile() {

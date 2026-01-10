@@ -10,6 +10,7 @@ import { TasksService } from '../tasks.service'
 export class TasksQueue extends WorkerHost {
   public static readonly JOB_DISCOVER_ARNS_RECORDS = 'discover-arns-records'
   public static readonly JOB_DISCOVER_ANT_RECORDS = 'discover-ant-records'
+  public static readonly JOB_CLEANUP_EXPIRED_RECORDS = 'cleanup-expired-records'
 
   private readonly logger = new Logger(TasksQueue.name)
   private readonly queueTtlMs: number
@@ -63,9 +64,22 @@ export class TasksQueue extends WorkerHost {
           )
         }
 
+        break
+
+      case TasksQueue.JOB_CLEANUP_EXPIRED_RECORDS:
+        try {
+          await this.arnsService.archiveExpiredRecords()
+        } catch (error) {
+          this.logger.error(
+            `Exception during expired records cleanup: ${error.message}`,
+            error.stack
+          )
+        }
+
         await this.tasksService.queueArnsRecordsDiscovery(this.queueTtlMs)
 
         break
+
       default:
         this.logger.warn(`Found unknown job ${job.name} [${job.id}]`)
     }

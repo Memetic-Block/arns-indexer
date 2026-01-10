@@ -63,19 +63,28 @@ export class TasksService implements OnApplicationBootstrap {
 
     try {
       await this.arnsRecordsDiscoveryFlow.add({
-        name: TasksQueue.JOB_DISCOVER_ANT_RECORDS,
+        name: TasksQueue.JOB_CLEANUP_EXPIRED_RECORDS,
         queueName: 'arns-records-discovery-queue',
         opts: {
           ...TasksService.DEFAULT_JOB_OPTS
         },
         children: [
           {
-            name: TasksQueue.JOB_DISCOVER_ARNS_RECORDS,
+            name: TasksQueue.JOB_DISCOVER_ANT_RECORDS,
             queueName: 'arns-records-discovery-queue',
             opts: {
-              delay,
               ...TasksService.DEFAULT_JOB_OPTS
-            }
+            },
+            children: [
+              {
+                name: TasksQueue.JOB_DISCOVER_ARNS_RECORDS,
+                queueName: 'arns-records-discovery-queue',
+                opts: {
+                  delay,
+                  ...TasksService.DEFAULT_JOB_OPTS
+                }
+              }
+            ]
           }
         ]
       })
