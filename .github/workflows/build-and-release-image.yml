@@ -55,10 +55,5 @@ jobs:
       
       - name: Deploy new version
         run: |
-          # if grep -q "stage" deploy-vars.json; then
-            sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/arns-indexer-stage.hcl
-            nomad job run operations/arns-indexer-stage.hcl
-          # else
-          #   sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/arns-indexer-live.hcl
-          #   nomad job run operations/arns-indexer-live.hcl
-          # fi
+          sed -i "s/\[\[ .commit_sha \]\]/${GITHUB_SHA}/g" operations/arns-indexer.hcl
+          nomad job run operations/arns-indexer.hcl
