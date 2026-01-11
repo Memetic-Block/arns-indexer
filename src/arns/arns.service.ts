@@ -27,6 +27,7 @@ export class ArnsService {
   private readonly antProcessIdBlacklist: string[]
   private readonly arnsCrawlGateway: string
   private readonly cuUrl: string
+  private readonly skipExpiredRecords: boolean
 
   constructor(
     private readonly config: ConfigService<{
@@ -34,6 +35,7 @@ export class ArnsService {
       ANT_PROCESS_ID_BLACKLIST_FILE: string
       ARNS_CRAWL_GATEWAY: string
       CU_URL: string
+      SKIP_EXPIRED_RECORDS: string
     }>,
     private readonly dataSource: DataSource,
     @InjectRepository(AntRecord)
@@ -51,6 +53,13 @@ export class ArnsService {
       { infer: true }
     )
     this.logger.log(`Using CU URL: ${this.cuUrl}`)
+
+    this.skipExpiredRecords = this.config.get<string>(
+      'SKIP_EXPIRED_RECORDS',
+      'true',
+      { infer: true }
+    ) === 'true'
+    this.logger.log(`Skip expired records: ${this.skipExpiredRecords}`)
 
     this.logger.log('Initializing ARIO for mainnet')
     this.ario = ARIO.mainnet({
@@ -143,9 +152,11 @@ export class ArnsService {
 
   public async updateArNSRecordsIndex() {
     const records = await this.getAllArNSRecords()
+    const now = Date.now()
 
     this.logger.log(`Updating database for [${records.length}] ArNS records`)
     const dbRecords: ArnsRecord[] = []
+    let skippedExpired = 0
     for (let i = 0; i < records.length; i++) {
       const record = records[i]
       if (this.antProcessIdBlacklist.includes(record.processId)) {
@@ -155,7 +166,23 @@ export class ArnsService {
         )
         continue
       }
+
+      // Skip expired lease records to prevent re-inserting archived records
+      if (
+        this.skipExpiredRecords &&
+        record.type === 'lease' &&
+        record.endTimestamp &&
+        record.endTimestamp < now
+      ) {
+        skippedExpired++
+        continue
+      }
+
       dbRecords.push(this.arnsRecordsRepository.create(record))
+    }
+
+    if (skippedExpired > 0) {
+      this.logger.log(`Skipped [${skippedExpired}] expired lease records`)
     }
 
     this.logger.log(

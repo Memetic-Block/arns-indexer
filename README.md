@@ -11,6 +11,7 @@ Well look no further!  ArNS Indexer is a microservice built on the NestJS framew
 
 1) Fetch all ArNS records
 2) Fetch all ANT records (& controllers)
+3) Archive expired ArNS and ANT lease records
 
 ArNS Indexer serves as a data bridge between legacy AO and hyper-aos while ArNS processes remain accessible only on legacynet.  Eventually, this will be replaced by dedicated hyper-aos processes or a hyperbeam device.
 
@@ -44,6 +45,8 @@ $ npm run start:prod
 - `DO_CLEAN` - `true` or `false` (default)
   on startup, ArNS Indexer will wipe the task queue
 - `ARNS_QUEUE_TTL_MS` - The cadence of the ArNS records discovery queue (defaults to 86400000 (1 day))
+- `SKIP_EXPIRED_RECORDS` - `true` (default) or `false`
+  When `true`, expired lease records fetched from the network are skipped during indexing to prevent re-inserting archived records
 
 ### AO Compute Unit
 - `CU_URL` - The URL for the Compute Unit the indexer will use to resolve records.  As ArNS Indexer uses the [ar.io sdk](https://github.com/ar-io/ar-io-sdk), this defaults to `https://cu.ardrive.io`.  It is strongly encouraged to run your own CU as to 1) not spam the ardrive CU and 2) ensure records have a good chance to resolve as you will have control over the behavior of the CU (such as taking snapshots)
@@ -115,11 +118,35 @@ migrations: [
 ...
 ```
 
+## Expired Records Archival
+
+ArNS Indexer automatically archives expired lease records at the end of each discovery cycle. The archival process:
+
+1. Finds ArNS records with `type: 'lease'` and `endTimestamp` in the past
+2. Copies the expired ArNS and associated ANT records to archive tables (`arns_record_archive` and `ant_record_archive`)
+3. Deletes the original records from the main tables
+
+All archive and delete operations happen within a single database transaction for consistency.
+
+### Archive Tables
+
+The archive tables contain all original fields plus:
+- `archivedAt` - Timestamp when the record was archived
+- `archiveReason` - Reason for archival (e.g., `'expired'`)
+- `originalId` - The original record's ID
+- `originalCreatedAt` / `originalUpdatedAt` - Original timestamps
+
+### Queue Flow
+
+The discovery queue runs in this order:
+1. `discover-arns-records` - Fetches and upserts ArNS records from the network
+2. `discover-ant-records` - Fetches and upserts ANT records for each ArNS record
+3. `cleanup-expired-records` - Archives and deletes expired lease records, then re-queues the next cycle
+
 ## Future Work
 1) Track ANT resolution failures in the database
-2) Archive ArNS and ANT records that expire
-3) Runtime cluster support
-4) Postgres cluster support
+2) Runtime cluster support
+3) Postgres cluster support
 
 ## Contributing
 Feel free to open a pull request!
