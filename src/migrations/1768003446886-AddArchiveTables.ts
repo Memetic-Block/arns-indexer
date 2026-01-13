@@ -51,23 +51,23 @@ export class AddArchiveTables1768003446886 implements MigrationInterface {
 
     // Index for lookups by archived name
     await queryRunner.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_arns_record_archive_name 
+      CREATE INDEX IF NOT EXISTS idx_arns_record_archive_name 
       ON arns_record_archive (name)
     `);
 
     await queryRunner.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ant_record_archive_name 
+      CREATE INDEX IF NOT EXISTS idx_ant_record_archive_name 
       ON ant_record_archive (name)
     `);
 
     // Index for lookups by archive date
     await queryRunner.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_arns_record_archive_archived_at 
+      CREATE INDEX IF NOT EXISTS idx_arns_record_archive_archived_at 
       ON arns_record_archive ("archivedAt")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ant_record_archive_archived_at 
+      CREATE INDEX IF NOT EXISTS idx_ant_record_archive_archived_at 
       ON ant_record_archive ("archivedAt")
     `);
   }
@@ -75,19 +75,19 @@ export class AddArchiveTables1768003446886 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes first
     await queryRunner.query(`
-      DROP INDEX CONCURRENTLY IF EXISTS idx_ant_record_archive_archived_at
+      DROP INDEX IF EXISTS idx_ant_record_archive_archived_at
     `);
 
     await queryRunner.query(`
-      DROP INDEX CONCURRENTLY IF EXISTS idx_arns_record_archive_archived_at
+      DROP INDEX IF EXISTS idx_arns_record_archive_archived_at
     `);
 
     await queryRunner.query(`
-      DROP INDEX CONCURRENTLY IF EXISTS idx_ant_record_archive_name
+      DROP INDEX IF EXISTS idx_ant_record_archive_name
     `);
 
     await queryRunner.query(`
-      DROP INDEX CONCURRENTLY IF EXISTS idx_arns_record_archive_name
+      DROP INDEX IF EXISTS idx_arns_record_archive_name
     `);
 
     // Drop tables
