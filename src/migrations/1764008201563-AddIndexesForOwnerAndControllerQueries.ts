@@ -21,10 +21,10 @@ export class AddIndexesForOwnerAndControllerQueries1764008201563
     `);
 
     // Composite index for owner + sort optimization
-    // Optimizes queries that filter by owner and sort by created_at DESC
+    // Optimizes queries that filter by owner and sort by createdAt DESC
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_ant_record_owner_created 
-      ON ant_record (owner, created_at DESC)
+      ON ant_record (owner, "createdAt" DESC)
     `);
   }
 
