@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq'
 import { Module } from '@nestjs/common'
 
 import { TasksQueue } from './processors/tasks.queue'
+import { TargetResolutionQueue } from './processors/target-resolution.queue'
 import { TasksService } from './tasks.service'
 import { ArnsModule } from '../arns/arns.module'
 
@@ -14,9 +15,13 @@ import { ArnsModule } from '../arns/arns.module'
     }),
     BullModule.registerFlowProducer({
       name: 'arns-records-discovery-flow'
+    }),
+    BullModule.registerQueue({
+      name: 'ant-target-resolution-queue',
+      streams: { events: { maxLen: 1000 } }
     })
   ],
-  providers: [TasksService, TasksQueue],
+  providers: [TasksService, TasksQueue, TargetResolutionQueue],
   exports: [TasksService]
 })
 export class TasksModule {}
