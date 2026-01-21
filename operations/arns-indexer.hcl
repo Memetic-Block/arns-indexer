@@ -41,6 +41,7 @@ job "arns-indexer" {
         ARNS_CRAWL_GATEWAY="arweave.net"
         DO_CLEAN="true"
         DB_MIGRATIONS_RUN="true"
+        ENABLE_TARGET_RESOLUTION="true"
       }
 
       template {
