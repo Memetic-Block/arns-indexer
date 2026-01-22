@@ -18,11 +18,15 @@ export class TargetResolutionQueue extends WorkerHost {
   private readonly logger = new Logger(TargetResolutionQueue.name)
   private readonly maxRetries: number
   private readonly retryDelayMs: number
+  private readonly batchSize: number
+  private readonly concurrency: number
 
   constructor(
     private readonly config: ConfigService<{
       MAX_RESOLVE_RETRIES: string
       RESOLVE_RETRY_DELAY_MS: string
+      RESOLUTION_BATCH_SIZE: string
+      RESOLUTION_CONCURRENCY: string
     }>,
     @InjectQueue('ant-target-resolution-queue')
     private readonly resolutionQueue: Queue,
@@ -53,9 +57,32 @@ export class TargetResolutionQueue extends WorkerHost {
       )
     }
 
+    const batchSizeConfig = this.config.get<string>(
+      'RESOLUTION_BATCH_SIZE',
+      '100'
+    )
+    this.batchSize = parseInt(batchSizeConfig, 10)
+    if (isNaN(this.batchSize) || this.batchSize < 1) {
+      throw new Error(
+        `RESOLUTION_BATCH_SIZE must be a positive integer, got: ${batchSizeConfig}`
+      )
+    }
+
+    const concurrencyConfig = this.config.get<string>(
+      'RESOLUTION_CONCURRENCY',
+      '2'
+    )
+    this.concurrency = parseInt(concurrencyConfig, 10)
+    if (isNaN(this.concurrency) || this.concurrency < 1) {
+      throw new Error(
+        `RESOLUTION_CONCURRENCY must be a positive integer, got: ${concurrencyConfig}`
+      )
+    }
+
     this.logger.log(
       `Target resolution configured with maxRetries=${this.maxRetries}, ` +
-      `retryDelayMs=${this.retryDelayMs}`
+      `retryDelayMs=${this.retryDelayMs}, batchSize=${this.batchSize}, ` +
+      `concurrency=${this.concurrency}`
     )
   }
 
@@ -79,50 +106,84 @@ export class TargetResolutionQueue extends WorkerHost {
   private async processResolveTargets(): Promise<void> {
     this.logger.log('Starting batch target resolution')
 
-    const unresolvedTargets = await this.targetResolutionService
-      .findUnresolvedTargets(this.maxRetries)
+    let totalResolved = 0
+    let totalFailed = 0
+    let totalQueuedRetry = 0
+    let totalErrors = 0
+    let batchNumber = 0
 
-    this.logger.log(
-      `Found ${unresolvedTargets.length} targets needing resolution`
-    )
+    while (true) {
+      batchNumber++
+      const unresolvedTargets = await this.targetResolutionService
+        .findUnresolvedTargets(this.maxRetries, this.batchSize)
 
-    let resolved = 0
-    let failed = 0
-    let queuedRetry = 0
-
-    for (const transactionId of unresolvedTargets) {
-      try {
-        const result = await this.targetResolutionService.processTarget(
-          transactionId,
-          this.maxRetries
-        )
-
-        if (result.resolved) {
-          resolved++
-        } else if (result.shouldRetry) {
-          // Queue delayed retry job for 404 responses
-          await this.queueRetryJob(transactionId)
-          queuedRetry++
-        } else {
-          failed++
-        }
-      } catch (error) {
-        this.logger.error(
-          `Error processing target ${transactionId}: ${error.message}`,
-          error.stack
-        )
-        // Network errors - let BullMQ handle via job retry
-        throw error
+      if (unresolvedTargets.length === 0) {
+        this.logger.log(`No more unresolved targets after ${batchNumber - 1} batches`)
+        break
       }
+
+      this.logger.log(
+        `Batch ${batchNumber}: Processing ${unresolvedTargets.length} targets ` +
+        `with concurrency ${this.concurrency}`
+      )
+
+      // Process targets in parallel chunks
+      const chunks = this.chunkArray(unresolvedTargets, this.concurrency)
+      
+      for (const chunk of chunks) {
+        const results = await Promise.allSettled(
+          chunk.map(async (transactionId) => {
+            const result = await this.targetResolutionService.processTarget(
+              transactionId,
+              this.maxRetries
+            )
+            return { transactionId, result }
+          })
+        )
+
+        for (const settledResult of results) {
+          if (settledResult.status === 'fulfilled') {
+            const { transactionId, result } = settledResult.value
+            if (result.resolved) {
+              totalResolved++
+            } else if (result.shouldRetry) {
+              await this.queueRetryJob(transactionId)
+              totalQueuedRetry++
+            } else {
+              totalFailed++
+            }
+          } else {
+            totalErrors++
+            this.logger.error(
+              `Error processing target: ${settledResult.reason?.message}`,
+              settledResult.reason?.stack
+            )
+          }
+        }
+      }
+
+      this.logger.log(
+        `Batch ${batchNumber} complete: resolved=${totalResolved}, ` +
+        `queuedRetry=${totalQueuedRetry}, failed=${totalFailed}, errors=${totalErrors}`
+      )
     }
 
     const stats = await this.targetResolutionService.getStats()
 
     this.logger.log(
-      `[alarm=target-resolution-complete] Batch resolution complete: ` +
-      `resolved=${resolved}, queuedRetry=${queuedRetry}, failed=${failed}. ` +
+      `[alarm=target-resolution-complete] Resolution complete after ${batchNumber} batches: ` +
+      `resolved=${totalResolved}, queuedRetry=${totalQueuedRetry}, ` +
+      `failed=${totalFailed}, errors=${totalErrors}. ` +
       `Total stats: ${JSON.stringify(stats)}`
     )
+  }
+
+  private chunkArray<T>(array: T[], size: number): T[][] {
+    const chunks: T[][] = []
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size))
+    }
+    return chunks
   }
 
   private async processRetryTarget(data: ResolveTargetJobData): Promise<void> {
