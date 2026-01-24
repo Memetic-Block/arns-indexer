@@ -35,10 +35,7 @@ export class TargetResolutionQueue extends WorkerHost {
   ) {
     super()
 
-    const maxRetriesConfig = this.config.get<string>(
-      'MAX_RESOLVE_RETRIES',
-      '3'
-    )
+    const maxRetriesConfig = this.config.get<string>('MAX_RESOLVE_RETRIES', '3')
     this.maxRetries = parseInt(maxRetriesConfig, 10)
     if (isNaN(this.maxRetries) || this.maxRetries < 1) {
       throw new Error(
@@ -81,8 +78,8 @@ export class TargetResolutionQueue extends WorkerHost {
 
     this.logger.log(
       `Target resolution configured with maxRetries=${this.maxRetries}, ` +
-      `retryDelayMs=${this.retryDelayMs}, batchSize=${this.batchSize}, ` +
-      `concurrency=${this.concurrency}`
+        `retryDelayMs=${this.retryDelayMs}, batchSize=${this.batchSize}, ` +
+        `concurrency=${this.concurrency}`
     )
   }
 
@@ -114,22 +111,27 @@ export class TargetResolutionQueue extends WorkerHost {
 
     while (true) {
       batchNumber++
-      const unresolvedTargets = await this.targetResolutionService
-        .findUnresolvedTargets(this.maxRetries, this.batchSize)
+      const unresolvedTargets =
+        await this.targetResolutionService.findUnresolvedTargets(
+          this.maxRetries,
+          this.batchSize
+        )
 
       if (unresolvedTargets.length === 0) {
-        this.logger.log(`No more unresolved targets after ${batchNumber - 1} batches`)
+        this.logger.log(
+          `No more unresolved targets after ${batchNumber - 1} batches`
+        )
         break
       }
 
       this.logger.log(
         `Batch ${batchNumber}: Processing ${unresolvedTargets.length} targets ` +
-        `with concurrency ${this.concurrency}`
+          `with concurrency ${this.concurrency}`
       )
 
       // Process targets in parallel chunks
       const chunks = this.chunkArray(unresolvedTargets, this.concurrency)
-      
+
       for (const chunk of chunks) {
         const results = await Promise.allSettled(
           chunk.map(async (transactionId) => {
@@ -164,7 +166,7 @@ export class TargetResolutionQueue extends WorkerHost {
 
       this.logger.log(
         `Batch ${batchNumber} complete: resolved=${totalResolved}, ` +
-        `queuedRetry=${totalQueuedRetry}, failed=${totalFailed}, errors=${totalErrors}`
+          `queuedRetry=${totalQueuedRetry}, failed=${totalFailed}, errors=${totalErrors}`
       )
     }
 
@@ -172,9 +174,9 @@ export class TargetResolutionQueue extends WorkerHost {
 
     this.logger.log(
       `[alarm=target-resolution-complete] Resolution complete after ${batchNumber} batches: ` +
-      `resolved=${totalResolved}, queuedRetry=${totalQueuedRetry}, ` +
-      `failed=${totalFailed}, errors=${totalErrors}. ` +
-      `Total stats: ${JSON.stringify(stats)}`
+        `resolved=${totalResolved}, queuedRetry=${totalQueuedRetry}, ` +
+        `failed=${totalFailed}, errors=${totalErrors}. ` +
+        `Total stats: ${JSON.stringify(stats)}`
     )
   }
 
@@ -198,18 +200,20 @@ export class TargetResolutionQueue extends WorkerHost {
       )
 
       if (result.resolved) {
-        this.logger.log(`Successfully resolved target ${transactionId} on retry`)
+        this.logger.log(
+          `Successfully resolved target ${transactionId} on retry`
+        )
       } else if (result.shouldRetry) {
         // Queue another delayed retry
         await this.queueRetryJob(transactionId)
         this.logger.log(
           `Target ${transactionId} still not found, ` +
-          `queued retry ${result.retryCount + 1}/${this.maxRetries}`
+            `queued retry ${result.retryCount + 1}/${this.maxRetries}`
         )
       } else {
         this.logger.warn(
           `Target ${transactionId} marked as not found after ` +
-          `${result.retryCount} retries`
+            `${result.retryCount} retries`
         )
       }
     } catch (error) {
@@ -247,7 +251,7 @@ export class TargetResolutionQueue extends WorkerHost {
   onFailed(job: Job<any, any, string>) {
     this.logger.error(
       `[alarm=failed-job-${job.name}] Failed ${job.name} [${job.id}]: ` +
-      `${job.failedReason}`
+        `${job.failedReason}`
     )
   }
 }

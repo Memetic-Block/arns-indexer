@@ -23,7 +23,8 @@ export class AppController {
     'attachment; filename="crawl-config-domains.yml"'
   )
   async getCrawlerConfigValidDomains() {
-    const configFile = await this.arnsService.legacy_generateCrawlDomainsConfigFile()
+    const configFile =
+      await this.arnsService.legacy_generateCrawlDomainsConfigFile()
     return new StreamableFile(Readable.from([configFile]))
   }
 }

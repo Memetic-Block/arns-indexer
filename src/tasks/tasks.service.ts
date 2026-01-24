@@ -5,44 +5,52 @@ import { Queue, FlowProducer } from 'bullmq'
 
 import { TasksQueue } from './processors/tasks.queue'
 import { TargetResolutionQueue } from './processors/target-resolution.queue'
+import { CrawlQueue } from './processors/crawl.queue'
 
 @Injectable()
 export class TasksService implements OnApplicationBootstrap {
   static readonly DEFAULT_JOB_OPTS = {
     removeOnComplete: true,
-    removeOnFail: 8,
+    removeOnFail: 8
   }
 
   private readonly logger = new Logger(TasksService.name)
   private readonly doClean?: string
   private readonly enableTargetResolution: boolean
+  private readonly crawlEnabled: boolean
 
   constructor(
     private readonly config: ConfigService<{
       DO_CLEAN: string
       VERSION: string
       ENABLE_TARGET_RESOLUTION: string
+      CRAWL_ANTS_ENABLED: string
     }>,
     @InjectQueue('arns-records-discovery-queue')
     public arnsRecordsDiscoveryQueue: Queue,
     @InjectFlowProducer('arns-records-discovery-flow')
     public arnsRecordsDiscoveryFlow: FlowProducer,
     @InjectQueue('ant-target-resolution-queue')
-    public antTargetResolutionQueue: Queue
+    public antTargetResolutionQueue: Queue,
+    @InjectQueue('ant-crawl-queue')
+    public antCrawlQueue: Queue
   ) {
     this.doClean = this.config.get<string>('DO_CLEAN', { infer: true })
-    this.enableTargetResolution = this.config.get<string>(
-      'ENABLE_TARGET_RESOLUTION',
-      'false',
-      { infer: true }
-    ) === 'true'
+    this.enableTargetResolution =
+      this.config.get<string>('ENABLE_TARGET_RESOLUTION', 'false', {
+        infer: true
+      }) === 'true'
+    this.crawlEnabled =
+      this.config.get<string>('CRAWL_ANTS_ENABLED', 'false', {
+        infer: true
+      }) === 'true'
 
     const version = this.config.get<string>('VERSION', { infer: true })
     this.logger.log(
       `Starting Tasks service for ArNS Indexer version: ${version}`
     )
     this.logger.log(
-      `Target resolution enabled: ${this.enableTargetResolution}`
+      `Target resolution enabled: ${this.enableTargetResolution}, crawl enabled: ${this.crawlEnabled}`
     )
   }
 
@@ -52,6 +60,7 @@ export class TasksService implements OnApplicationBootstrap {
       try {
         await this.arnsRecordsDiscoveryQueue.obliterate({ force: true })
         await this.antTargetResolutionQueue.obliterate({ force: true })
+        await this.antCrawlQueue.obliterate({ force: true })
       } catch (error) {
         this.logger.error(
           `Failed cleaning up queues: ${error.message}`,
@@ -63,7 +72,7 @@ export class TasksService implements OnApplicationBootstrap {
     this.logger.log(
       `Bootstrapping Tasks service with a new arns records discovery queue`
     )
-    this.queueArnsRecordsDiscovery().catch(error => {
+    this.queueArnsRecordsDiscovery().catch((error) => {
       this.logger.error(
         `Failed to queue initial ARNs records discovery job: ${error.message}`,
         error.stack
@@ -99,9 +108,10 @@ export class TasksService implements OnApplicationBootstrap {
       ]
 
       // If target resolution is enabled, add it as parent of cleanup
-      // Flow execution order: DISCOVER_ARNS -> DISCOVER_ANT -> CLEANUP -> RESOLVE_TARGETS
+      // Flow execution order: DISCOVER_ARNS -> DISCOVER_ANT -> CLEANUP -> RESOLVE_TARGETS -> CRAWL_TARGETS
       if (this.enableTargetResolution) {
-        await this.arnsRecordsDiscoveryFlow.add({
+        // Build the resolution job
+        const resolutionJob = {
           name: TargetResolutionQueue.JOB_RESOLVE_ANT_TARGETS,
           queueName: 'ant-target-resolution-queue',
           opts: {
@@ -122,7 +132,26 @@ export class TasksService implements OnApplicationBootstrap {
               children
             }
           ]
-        })
+        }
+
+        // If crawling is enabled, add crawl job as the top-level parent
+        if (this.crawlEnabled) {
+          await this.arnsRecordsDiscoveryFlow.add({
+            name: CrawlQueue.JOB_CRAWL_ANT_TARGETS,
+            queueName: 'ant-crawl-queue',
+            opts: {
+              ...TasksService.DEFAULT_JOB_OPTS,
+              attempts: 3,
+              backoff: {
+                type: 'exponential',
+                delay: 5000
+              }
+            },
+            children: [resolutionJob]
+          })
+        } else {
+          await this.arnsRecordsDiscoveryFlow.add(resolutionJob)
+        }
       } else {
         await this.arnsRecordsDiscoveryFlow.add({
           name: TasksQueue.JOB_CLEANUP_EXPIRED_RECORDS,
@@ -137,7 +166,7 @@ export class TasksService implements OnApplicationBootstrap {
       this.logger.log(
         `[alarm=enqueued-arns-records-discovery] ` +
           `Enqueued ArNS records discovery job ` +
-          `(target resolution: ${this.enableTargetResolution})`
+          `(target resolution: ${this.enableTargetResolution}, crawl: ${this.crawlEnabled})`
       )
     } catch (error) {
       this.logger.error(
