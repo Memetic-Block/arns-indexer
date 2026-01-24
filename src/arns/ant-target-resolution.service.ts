@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 
 import { AntRecord } from './schema/ant-record.entity'
+import { ArnsRecord } from './schema/arns-record.entity'
 import {
   AntResolvedTarget,
   CrawlStatus,
@@ -29,11 +30,15 @@ export class AntTargetResolutionService {
   private readonly logger: Logger = new Logger(AntTargetResolutionService.name)
   private readonly arweaveGateway: string
   private readonly crawlEnabled: boolean
+  private readonly resolutionWhitelist: string[] | '*' | null
+  private readonly resolutionBlacklist: string[] | '*' | null
 
   constructor(
     private readonly config: ConfigService<{
       ARNS_CRAWL_GATEWAY: string
       CRAWL_ANTS_ENABLED: string
+      TARGET_RESOLUTION_WHITELIST: string
+      TARGET_RESOLUTION_BLACKLIST: string
     }>,
     @InjectRepository(AntResolvedTarget)
     private resolvedTargetRepository: Repository<AntResolvedTarget>,
@@ -47,9 +52,48 @@ export class AntTargetResolutionService {
     )
     this.crawlEnabled =
       this.config.get<string>('CRAWL_ANTS_ENABLED', 'false') === 'true'
-    this.logger.log(
-      `Using Arweave gateway: ${this.arweaveGateway}, crawl enabled: ${this.crawlEnabled}`
+
+    // Parse resolution whitelist/blacklist from env vars
+    this.resolutionWhitelist = this.parseFilterList(
+      this.config.get<string>('TARGET_RESOLUTION_WHITELIST', '', {
+        infer: true
+      })
     )
+    this.resolutionBlacklist = this.parseFilterList(
+      this.config.get<string>('TARGET_RESOLUTION_BLACKLIST', '', {
+        infer: true
+      })
+    )
+
+    this.logger.log(
+      `Using Arweave gateway: ${this.arweaveGateway}, crawl enabled: ${this.crawlEnabled}, ` +
+        `resolution filters - whitelist: ${this.formatFilterForLog(this.resolutionWhitelist)}, ` +
+        `blacklist: ${this.formatFilterForLog(this.resolutionBlacklist)}`
+    )
+  }
+
+  /**
+   * Parse a comma-separated filter list from env var.
+   * Returns '*' for wildcard, null for empty/unset, or array of names.
+   */
+  private parseFilterList(value: string): string[] | '*' | null {
+    if (!value || value.trim() === '') {
+      return null
+    }
+    const trimmed = value.trim()
+    if (trimmed === '*') {
+      return '*'
+    }
+    return trimmed
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+  }
+
+  private formatFilterForLog(filter: string[] | '*' | null): string {
+    if (filter === null) return 'none'
+    if (filter === '*') return '*'
+    return `[${filter.length} names]`
   }
 
   /**
@@ -60,10 +104,17 @@ export class AntTargetResolutionService {
     maxRetries: number,
     limit: number = 100
   ): Promise<string[]> {
+    // If blacklist is '*', deny all - return empty
+    if (this.resolutionBlacklist === '*') {
+      this.logger.debug('Resolution blacklist is *, skipping all targets')
+      return []
+    }
+
     // Get all unique transaction IDs from AntRecord that need resolution
-    const result = await this.antRecordRepository
+    const queryBuilder = this.antRecordRepository
       .createQueryBuilder('ant')
       .select('DISTINCT ant.transactionId', 'transactionId')
+      .innerJoin(ArnsRecord, 'arns', 'arns.name = ant.name')
       .leftJoin(
         AntResolvedTarget,
         'resolved',
@@ -82,8 +133,22 @@ export class AntTargetResolutionService {
           maxRetries
         }
       )
-      .limit(limit)
-      .getRawMany()
+
+    // Apply whitelist filter (if set and not '*')
+    if (this.resolutionWhitelist !== null && this.resolutionWhitelist !== '*') {
+      queryBuilder.andWhere('arns.name IN (:...whitelist)', {
+        whitelist: this.resolutionWhitelist
+      })
+    }
+
+    // Apply blacklist filter (if set)
+    if (this.resolutionBlacklist !== null) {
+      queryBuilder.andWhere('arns.name NOT IN (:...blacklist)', {
+        blacklist: this.resolutionBlacklist
+      })
+    }
+
+    const result = await queryBuilder.limit(limit).getRawMany()
 
     return result.map((r) => r.transactionId)
   }

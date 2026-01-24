@@ -28,6 +28,8 @@ export class ArnsService {
   private readonly arnsCrawlGateway: string
   private readonly cuUrl: string
   private readonly skipExpiredRecords: boolean
+  private readonly discoveryWhitelist: string[] | '*' | null
+  private readonly discoveryBlacklist: string[] | '*' | null
 
   constructor(
     private readonly config: ConfigService<{
@@ -36,6 +38,8 @@ export class ArnsService {
       ARNS_CRAWL_GATEWAY: string
       CU_URL: string
       SKIP_EXPIRED_RECORDS: string
+      ARNS_DISCOVERY_WHITELIST: string
+      ARNS_DISCOVERY_BLACKLIST: string
     }>,
     private readonly dataSource: DataSource,
     @InjectRepository(AntRecord)
@@ -117,6 +121,71 @@ export class ArnsService {
         `Got [${this.antProcessIdBlacklist.length}] blacklisted ANT process IDs`
       )
     }
+
+    // Parse discovery whitelist/blacklist from env vars
+    this.discoveryWhitelist = this.parseFilterList(
+      this.config.get<string>('ARNS_DISCOVERY_WHITELIST', '', { infer: true })
+    )
+    this.discoveryBlacklist = this.parseFilterList(
+      this.config.get<string>('ARNS_DISCOVERY_BLACKLIST', '', { infer: true })
+    )
+    this.logger.log(
+      `Discovery filters - whitelist: ${this.formatFilterForLog(this.discoveryWhitelist)}, ` +
+        `blacklist: ${this.formatFilterForLog(this.discoveryBlacklist)}`
+    )
+  }
+
+  /**
+   * Parse a comma-separated filter list from env var.
+   * Returns '*' for wildcard, null for empty/unset, or array of names.
+   */
+  private parseFilterList(value: string): string[] | '*' | null {
+    if (!value || value.trim() === '') {
+      return null
+    }
+    const trimmed = value.trim()
+    if (trimmed === '*') {
+      return '*'
+    }
+    return trimmed
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+  }
+
+  private formatFilterForLog(filter: string[] | '*' | null): string {
+    if (filter === null) return 'none'
+    if (filter === '*') return '*'
+    return `[${filter.length} names]`
+  }
+
+  /**
+   * Check if an ARNS name should be processed based on whitelist/blacklist.
+   * A name passes if: (whitelist is empty OR name in whitelist OR whitelist is '*')
+   *                   AND (blacklist is empty OR name not in blacklist)
+   *                   AND (blacklist is not '*')
+   */
+  private shouldProcessArnsName(name: string): boolean {
+    // If blacklist is '*', deny all
+    if (this.discoveryBlacklist === '*') {
+      return false
+    }
+
+    // Check whitelist (if set and not '*')
+    if (this.discoveryWhitelist !== null && this.discoveryWhitelist !== '*') {
+      if (!this.discoveryWhitelist.includes(name)) {
+        return false
+      }
+    }
+
+    // Check blacklist (if set)
+    if (this.discoveryBlacklist !== null) {
+      if (this.discoveryBlacklist.includes(name)) {
+        return false
+      }
+    }
+
+    return true
   }
 
   public async getArNSRecords(cursor?: string, limit: number = 1000) {
@@ -162,8 +231,16 @@ export class ArnsService {
     this.logger.log(`Updating database for [${records.length}] ArNS records`)
     const dbRecords: ArnsRecord[] = []
     let skippedExpired = 0
+    let skippedByFilter = 0
     for (let i = 0; i < records.length; i++) {
       const record = records[i]
+
+      // Apply ARNS name filter
+      if (!this.shouldProcessArnsName(record.name)) {
+        skippedByFilter++
+        continue
+      }
+
       if (this.antProcessIdBlacklist.includes(record.processId)) {
         this.logger.warn(
           `Skipping ArNS record with blacklisted process ID ` +
@@ -184,6 +261,10 @@ export class ArnsService {
       }
 
       dbRecords.push(this.arnsRecordsRepository.create(record))
+    }
+
+    if (skippedByFilter > 0) {
+      this.logger.log(`Skipped [${skippedByFilter}] records by name filter`)
     }
 
     if (skippedExpired > 0) {
