@@ -68,7 +68,8 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "@dha-team/arbundles": "1.0.3"
+    "@dha-team/arbundles": "1.0.3",
+    "@permaweb/aoconnect": "0.0.92"
   },
   "jest": {
     "moduleFileExtensions": [
