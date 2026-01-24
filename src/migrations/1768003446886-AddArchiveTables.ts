@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from 'typeorm'
 
 export class AddArchiveTables1768003446886 implements MigrationInterface {
-  name = 'AddArchiveTables1768003446886';
+  name = 'AddArchiveTables1768003446886'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create ArNS record archive table
@@ -22,7 +22,7 @@ export class AddArchiveTables1768003446886 implements MigrationInterface {
         "undernameLimit" integer,
         CONSTRAINT "PK_arns_record_archive" PRIMARY KEY ("id")
       )
-    `);
+    `)
 
     // Create ANT record archive table
     await queryRunner.query(`
@@ -47,56 +47,56 @@ export class AddArchiveTables1768003446886 implements MigrationInterface {
         "controllers" character varying array DEFAULT '{}',
         CONSTRAINT "PK_ant_record_archive" PRIMARY KEY ("id")
       )
-    `);
+    `)
 
     // Index for lookups by archived name
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_arns_record_archive_name 
       ON arns_record_archive (name)
-    `);
+    `)
 
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_ant_record_archive_name 
       ON ant_record_archive (name)
-    `);
+    `)
 
     // Index for lookups by archive date
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_arns_record_archive_archived_at 
       ON arns_record_archive ("archivedAt")
-    `);
+    `)
 
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_ant_record_archive_archived_at 
       ON ant_record_archive ("archivedAt")
-    `);
+    `)
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes first
     await queryRunner.query(`
       DROP INDEX IF EXISTS idx_ant_record_archive_archived_at
-    `);
+    `)
 
     await queryRunner.query(`
       DROP INDEX IF EXISTS idx_arns_record_archive_archived_at
-    `);
+    `)
 
     await queryRunner.query(`
       DROP INDEX IF EXISTS idx_ant_record_archive_name
-    `);
+    `)
 
     await queryRunner.query(`
       DROP INDEX IF EXISTS idx_arns_record_archive_name
-    `);
+    `)
 
     // Drop tables
     await queryRunner.query(`
       DROP TABLE IF EXISTS "ant_record_archive"
-    `);
+    `)
 
     await queryRunner.query(`
       DROP TABLE IF EXISTS "arns_record_archive"
-    `);
+    `)
   }
 }

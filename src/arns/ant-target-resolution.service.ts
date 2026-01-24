@@ -6,6 +6,7 @@ import { Repository } from 'typeorm'
 import { AntRecord } from './schema/ant-record.entity'
 import {
   AntResolvedTarget,
+  CrawlStatus,
   ManifestValidation,
   ResolutionStatus,
   TargetCategory
@@ -27,10 +28,12 @@ export interface ResolutionResult {
 export class AntTargetResolutionService {
   private readonly logger: Logger = new Logger(AntTargetResolutionService.name)
   private readonly arweaveGateway: string
+  private readonly crawlEnabled: boolean
 
   constructor(
     private readonly config: ConfigService<{
       ARNS_CRAWL_GATEWAY: string
+      CRAWL_ANTS_ENABLED: string
     }>,
     @InjectRepository(AntResolvedTarget)
     private resolvedTargetRepository: Repository<AntResolvedTarget>,
@@ -42,7 +45,11 @@ export class AntTargetResolutionService {
       'arweave.net',
       { infer: true }
     )
-    this.logger.log(`Using Arweave gateway: ${this.arweaveGateway}`)
+    this.crawlEnabled =
+      this.config.get<string>('CRAWL_ANTS_ENABLED', 'false') === 'true'
+    this.logger.log(
+      `Using Arweave gateway: ${this.arweaveGateway}, crawl enabled: ${this.crawlEnabled}`
+    )
   }
 
   /**
@@ -78,7 +85,7 @@ export class AntTargetResolutionService {
       .limit(limit)
       .getRawMany()
 
-    return result.map(r => r.transactionId)
+    return result.map((r) => r.transactionId)
   }
 
   /**
@@ -122,7 +129,7 @@ export class AntTargetResolutionService {
       if (data.errors) {
         this.logger.warn(
           `GraphQL errors for ${transactionId}: ` +
-          `${JSON.stringify(data.errors)}`
+            `${JSON.stringify(data.errors)}`
         )
       }
 
@@ -266,14 +273,21 @@ export class AntTargetResolutionService {
         target.manifestValidation = await this.validateManifest(transactionId)
       }
 
+      // Set crawl status based on content type and crawl feature flag
+      target.crawlStatus = this.determineCrawlStatus(target)
+
       await this.resolvedTargetRepository.save(target)
 
       this.logger.log(
         `Resolved target ${transactionId}: ` +
-        `${target.targetCategory} (${target.contentType})`
+          `${target.targetCategory} (${target.contentType}), crawlStatus=${target.crawlStatus}`
       )
 
-      return { resolved: true, shouldRetry: false, retryCount: target.retryCount }
+      return {
+        resolved: true,
+        shouldRetry: false,
+        retryCount: target.retryCount
+      }
     }
 
     if (result.status === 'not_found') {
@@ -283,13 +297,13 @@ export class AntTargetResolutionService {
         target.status = ResolutionStatus.NOT_FOUND
         this.logger.warn(
           `Target ${transactionId} marked as not found ` +
-          `after ${target.retryCount} attempts`
+            `after ${target.retryCount} attempts`
         )
       } else {
         target.status = ResolutionStatus.PENDING
         this.logger.log(
           `Target ${transactionId} not found, ` +
-          `retry ${target.retryCount}/${maxRetries}`
+            `retry ${target.retryCount}/${maxRetries}`
         )
       }
 
@@ -347,5 +361,52 @@ export class AntTargetResolutionService {
     }
 
     return { total, resolved, pending, notFound, byCategory }
+  }
+
+  /**
+   * Determine if a resolved target should be queued for crawling
+   */
+  private determineCrawlStatus(target: AntResolvedTarget): CrawlStatus | null {
+    // If crawling is disabled, skip
+    if (!this.crawlEnabled) {
+      return CrawlStatus.SKIPPED
+    }
+
+    const { contentType, targetCategory, manifestValidation } = target
+
+    // Crawl valid manifests with an index
+    if (
+      targetCategory === TargetCategory.MANIFEST &&
+      manifestValidation?.isValid &&
+      manifestValidation?.hasIndex
+    ) {
+      return CrawlStatus.PENDING
+    }
+
+    // Crawl text/html content
+    if (this.isCrawlableContentType(contentType)) {
+      return CrawlStatus.PENDING
+    }
+
+    // Skip non-crawlable content
+    return CrawlStatus.SKIPPED
+  }
+
+  /**
+   * Check if a content type should be crawled
+   */
+  private isCrawlableContentType(contentType: string | null): boolean {
+    if (!contentType) {
+      return false
+    }
+
+    const normalizedType = contentType.toLowerCase().split(';')[0].trim()
+
+    return (
+      normalizedType === 'text/html' ||
+      normalizedType === 'text/plain' ||
+      normalizedType.startsWith('text/') ||
+      normalizedType === 'application/xhtml+xml'
+    )
   }
 }

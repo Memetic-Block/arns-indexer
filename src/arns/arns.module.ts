@@ -4,11 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 
 import { ArnsService } from './arns.service'
 import { AntTargetResolutionService } from './ant-target-resolution.service'
+import { ContentCrawlerService } from './content-crawler.service'
 import { AntRecord } from './schema/ant-record.entity'
 import { AntRecordArchive } from './schema/ant-record-archive.entity'
 import { AntResolvedTarget } from './schema/ant-resolved-target.entity'
 import { ArnsRecord } from './schema/arns-record.entity'
 import { ArnsRecordArchive } from './schema/arns-record-archive.entity'
+import { CrawledDocument } from './schema/crawled-document.entity'
 
 @Module({
   imports: [
@@ -18,11 +20,12 @@ import { ArnsRecordArchive } from './schema/arns-record-archive.entity'
       AntRecordArchive,
       AntResolvedTarget,
       ArnsRecord,
-      ArnsRecordArchive
+      ArnsRecordArchive,
+      CrawledDocument
     ])
   ],
   controllers: [],
-  providers: [ ArnsService, AntTargetResolutionService ],
-  exports: [ ArnsService, AntTargetResolutionService ]
+  providers: [ArnsService, AntTargetResolutionService, ContentCrawlerService],
+  exports: [ArnsService, AntTargetResolutionService, ContentCrawlerService]
 })
 export class ArnsModule {}

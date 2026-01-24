@@ -10,7 +10,7 @@ import {
 export type ArnsRecordType = 'lease' | 'permabuy'
 
 @Entity()
-@Unique([ 'name' ])
+@Unique(['name'])
 export class ArnsRecord {
   @PrimaryGeneratedColumn()
   id: number
@@ -39,7 +39,7 @@ export class ArnsRecord {
   @Column({ type: 'bigint', nullable: true, default: null })
   endTimestamp: number | null
 
-  @Column({ type: 'enum' , enum: [ 'lease', 'permabuy' ], nullable: true })
+  @Column({ type: 'enum', enum: ['lease', 'permabuy'], nullable: true })
   type: ArnsRecordType
 
   @Column({ type: 'int', nullable: true })

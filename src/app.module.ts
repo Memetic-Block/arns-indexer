@@ -32,42 +32,37 @@ import { CreateAntResolvedTargetTable1769040000000 } from './migrations/17690400
           REDIS_SENTINEL_2_PORT: number
           REDIS_SENTINEL_3_HOST: string
           REDIS_SENTINEL_3_PORT: number
-        }>,
+        }>
       ) => {
         const logger = new Logger(AppModule.name)
-        const redisMode = config.get<string>(
-          'REDIS_MODE',
-          'standalone',
-          { infer: true }
-        )
+        const redisMode = config.get<string>('REDIS_MODE', 'standalone', {
+          infer: true
+        })
 
         let connection: ConnectionOptions = {
           host: config.get<string>('REDIS_HOST', { infer: true }),
-          port: config.get<number>('REDIS_PORT', { infer: true }),
+          port: config.get<number>('REDIS_PORT', { infer: true })
         }
 
         if (redisMode === 'sentinel') {
           const name = config.get<string>('REDIS_MASTER_NAME', { infer: true })
           const sentinels = [
             {
-              host: config.get<string>(
-                'REDIS_SENTINEL_1_HOST',
-                { infer: true }
-              ),
+              host: config.get<string>('REDIS_SENTINEL_1_HOST', {
+                infer: true
+              }),
               port: config.get<number>('REDIS_SENTINEL_1_PORT', { infer: true })
             },
             {
-              host: config.get<string>(
-                'REDIS_SENTINEL_2_HOST',
-                { infer: true }
-              ),
+              host: config.get<string>('REDIS_SENTINEL_2_HOST', {
+                infer: true
+              }),
               port: config.get<number>('REDIS_SENTINEL_2_PORT', { infer: true })
             },
             {
-              host: config.get<string>(
-                'REDIS_SENTINEL_3_HOST',
-                { infer: true }
-              ),
+              host: config.get<string>('REDIS_SENTINEL_3_HOST', {
+                infer: true
+              }),
               port: config.get<number>('REDIS_SENTINEL_3_PORT', { infer: true })
             }
           ]
@@ -91,18 +86,14 @@ import { CreateAntResolvedTargetTable1769040000000 } from './migrations/17690400
           DB_NAME: string
           DB_SYNCHRONIZE: string // DO NOT SET THIS TO 'true' IN PRODUCTION!
           DB_MIGRATIONS_RUN: string
-        }>,
+        }>
       ) => {
         const logger = new Logger(AppModule.name)
 
-        const synchronize = config.get<string>(
-          'DB_SYNCHRONIZE',
-          { infer: true }
-        ) === 'true'
-        const migrationsRun = config.get<string>(
-          'DB_MIGRATIONS_RUN',
-          { infer: true }
-        ) === 'true'
+        const synchronize =
+          config.get<string>('DB_SYNCHRONIZE', { infer: true }) === 'true'
+        const migrationsRun =
+          config.get<string>('DB_MIGRATIONS_RUN', { infer: true }) === 'true'
 
         logger.log(`DB_SYNCHRONIZE: ${synchronize}`)
         logger.log(`DB_MIGRATIONS_RUN: ${migrationsRun}`)
@@ -115,10 +106,8 @@ import { CreateAntResolvedTargetTable1769040000000 } from './migrations/17690400
           password: config.get<string>('DB_PASSWORD', { infer: true }),
           database: config.get<string>('DB_NAME', { infer: true }),
           entities: dbEntities,
-          synchronize: config.get<string>(
-            'DB_SYNCHRONIZE',
-            { infer: true }
-          ) === 'true',
+          synchronize:
+            config.get<string>('DB_SYNCHRONIZE', { infer: true }) === 'true',
           migrations: [
             CreateArnsAndAntRecordsTables1761260838990,
             AddControllersToAntRecordTable1761423495919,
@@ -126,17 +115,15 @@ import { CreateAntResolvedTargetTable1769040000000 } from './migrations/17690400
             AddArchiveTables1768003446886,
             CreateAntResolvedTargetTable1769040000000
           ],
-          migrationsRun: config.get<string>(
-            'DB_MIGRATIONS_RUN',
-            { infer: true }
-          ) === 'true',
+          migrationsRun:
+            config.get<string>('DB_MIGRATIONS_RUN', { infer: true }) === 'true'
         }
       }
     }),
     ArnsModule,
     TasksModule
   ],
-  controllers: [ AppController ],
-  providers: [ AppService ]
+  controllers: [AppController],
+  providers: [AppService]
 })
 export class AppModule {}

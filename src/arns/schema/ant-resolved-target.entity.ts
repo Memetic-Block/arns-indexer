@@ -18,6 +18,14 @@ export enum ResolutionStatus {
   NOT_FOUND = 'not_found'
 }
 
+export enum CrawlStatus {
+  PENDING = 'pending',
+  CRAWLING = 'crawling',
+  CRAWLED = 'crawled',
+  SKIPPED = 'skipped',
+  FAILED = 'failed'
+}
+
 export interface ManifestValidation {
   isValid: boolean
   error?: string
@@ -62,4 +70,20 @@ export class AntResolvedTarget {
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   resolvedAt: Date | null
+
+  @Column({
+    type: 'enum',
+    enum: CrawlStatus,
+    nullable: true
+  })
+  crawlStatus: CrawlStatus | null
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  crawledAt: Date | null
+
+  @Column({ type: 'text', nullable: true })
+  robotsTxt: string | null
+
+  @Column({ type: 'text', nullable: true })
+  sitemapXml: string | null
 }

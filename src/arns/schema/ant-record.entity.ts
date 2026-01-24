@@ -8,7 +8,7 @@ import {
 } from 'typeorm'
 
 @Entity()
-@Unique([ 'name', 'undername' ])
+@Unique(['name', 'undername'])
 export class AntRecord {
   @PrimaryGeneratedColumn()
   id: number

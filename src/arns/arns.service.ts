@@ -47,18 +47,15 @@ export class ArnsService {
     @InjectRepository(ArnsRecordArchive)
     private arnsRecordsArchiveRepository: Repository<ArnsRecordArchive>
   ) {
-    this.cuUrl = this.config.get<string>(
-      'CU_URL',
-      'https://cu.ardrive.io',
-      { infer: true }
-    )
+    this.cuUrl = this.config.get<string>('CU_URL', 'https://cu.ardrive.io', {
+      infer: true
+    })
     this.logger.log(`Using CU URL: ${this.cuUrl}`)
 
-    this.skipExpiredRecords = this.config.get<string>(
-      'SKIP_EXPIRED_RECORDS',
-      'true',
-      { infer: true }
-    ) === 'true'
+    this.skipExpiredRecords =
+      this.config.get<string>('SKIP_EXPIRED_RECORDS', 'true', {
+        infer: true
+      }) === 'true'
     this.logger.log(`Skip expired records: ${this.skipExpiredRecords}`)
 
     this.logger.log('Initializing ARIO for mainnet')
@@ -79,8 +76,11 @@ export class ArnsService {
     )
     this.logger.log(`Using ArNS crawl gateway: ${this.arnsCrawlGateway}`)
 
-    const antTargetBlacklistFilePath = this.config
-      .get<string>('ANT_TARGET_BLACKLIST_FILE', '', { infer: true })
+    const antTargetBlacklistFilePath = this.config.get<string>(
+      'ANT_TARGET_BLACKLIST_FILE',
+      '',
+      { infer: true }
+    )
     if (antTargetBlacklistFilePath) {
       this.logger.log(
         `Using ANT target blacklist: [${antTargetBlacklistFilePath}]`
@@ -91,14 +91,17 @@ export class ArnsService {
       )
       this.antTargetBlacklist = antTargetBlacklistFile
         .split('\n')
-        .map(item => item.trim())
+        .map((item) => item.trim())
       this.logger.log(
         `Got [${this.antTargetBlacklist.length}] blacklisted ANT targets`
       )
     }
 
-    const antProcessIdBlacklistFilePath = this.config
-      .get<string>('ANT_PROCESS_ID_BLACKLIST_FILE', '', { infer: true })
+    const antProcessIdBlacklistFilePath = this.config.get<string>(
+      'ANT_PROCESS_ID_BLACKLIST_FILE',
+      '',
+      { infer: true }
+    )
     if (antProcessIdBlacklistFilePath) {
       this.logger.log(
         `Using ANT process blacklist: [${antProcessIdBlacklistFilePath}]`
@@ -109,7 +112,7 @@ export class ArnsService {
       )
       this.antProcessIdBlacklist = antProcessIdBlacklistFile
         .split('\n')
-        .map(item => item.trim())
+        .map((item) => item.trim())
       this.logger.log(
         `Got [${this.antProcessIdBlacklist.length}] blacklisted ANT process IDs`
       )
@@ -144,7 +147,9 @@ export class ArnsService {
       const result = await this.getArNSRecords(cursor)
       allRecords.push(...result.items)
       cursor = result.nextCursor
-      if (!result.hasMore) { break }
+      if (!result.hasMore) {
+        break
+      }
     } while (cursor)
 
     return allRecords
@@ -161,8 +166,8 @@ export class ArnsService {
       const record = records[i]
       if (this.antProcessIdBlacklist.includes(record.processId)) {
         this.logger.warn(
-          `Skipping ArNS record with blacklisted process ID `
-            + `[${record.processId}]`
+          `Skipping ArNS record with blacklisted process ID ` +
+            `[${record.processId}]`
         )
         continue
       }
@@ -232,20 +237,20 @@ export class ArnsService {
     for (let i = 0; i < records.length; i++) {
       const record = records[i]
       this.logger.log(
-        `Processing record [${i+1}/${records.length}] `
-          + `with name [${record.name}] & processId [${record.processId}]`
+        `Processing record [${i + 1}/${records.length}] ` +
+          `with name [${record.name}] & processId [${record.processId}]`
       )
 
       const antState = await this.getANTState(record.processId)
       if (!antState) {
         this.logger.warn(
-          `No ANT records found for name [${record.name}] & `
-            + `process ID [${record.processId}]`
+          `No ANT records found for name [${record.name}] & ` +
+            `process ID [${record.processId}]`
         )
         continue
       }
 
-      const dbRecords = Object.keys(antState.Records).map(undername => {
+      const dbRecords = Object.keys(antState.Records).map((undername) => {
         return this.antRecordsRepository.create({
           name: record.name,
           processId: record.processId,
@@ -263,8 +268,8 @@ export class ArnsService {
       })
 
       this.logger.log(
-        `Upserting [${dbRecords.length}] undername records `
-          + `for ArNS name [${record.name}]`
+        `Upserting [${dbRecords.length}] undername records ` +
+          `for ArNS name [${record.name}]`
       )
 
       await this.antRecordsRepository.upsert(dbRecords, ['name', 'undername'])
@@ -291,7 +296,7 @@ export class ArnsService {
       return { arnsArchived: 0, antArchived: 0 }
     }
 
-    const expiredNames = expiredArnsRecords.map(r => r.name)
+    const expiredNames = expiredArnsRecords.map((r) => r.name)
     this.logger.log(
       `Found [${expiredArnsRecords.length}] expired ArNS records: ` +
         `[${expiredNames.slice(0, 10).join(', ')}${expiredNames.length > 10 ? '...' : ''}]`
@@ -307,10 +312,10 @@ export class ArnsService {
     )
 
     // Perform archive and delete in a single transaction
-    const result = await this.dataSource.transaction(async manager => {
+    const result = await this.dataSource.transaction(async (manager) => {
       // Archive ANT records first
       if (expiredAntRecords.length > 0) {
-        const antArchiveRecords = expiredAntRecords.map(record =>
+        const antArchiveRecords = expiredAntRecords.map((record) =>
           manager.create(AntRecordArchive, {
             archiveReason: 'expired',
             originalId: record.id,
@@ -334,7 +339,7 @@ export class ArnsService {
       }
 
       // Archive ArNS records
-      const arnsArchiveRecords = expiredArnsRecords.map(record =>
+      const arnsArchiveRecords = expiredArnsRecords.map((record) =>
         manager.create(ArnsRecordArchive, {
           archiveReason: 'expired',
           originalId: record.id,
@@ -400,18 +405,20 @@ export class ArnsService {
       _.uniq(
         records
           .filter(
-            record => !record.undername.includes(' ') &&
+            (record) =>
+              !record.undername.includes(' ') &&
               !record.undername.includes('+') &&
               !record.name.includes(' ') &&
               !record.name.includes('+')
           )
-          .map(record => {
-            const subdomain = record.undername === '@'
-              ? record.name
-              : `${record.undername}_${record.name}`
+          .map((record) => {
+            const subdomain =
+              record.undername === '@'
+                ? record.name
+                : `${record.undername}_${record.name}`
             return `https://${subdomain}.${this.arnsCrawlGateway}`.toLowerCase()
           })
-      ).forEach(url => {
+      ).forEach((url) => {
         crawlConfigDomains += `  - url: ${url}\n`
       })
 
