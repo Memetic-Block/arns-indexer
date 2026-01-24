@@ -57,6 +57,9 @@ job "arns-indexer" {
         {{- range service "arns-indexer-cu" }}
         CU_URL="http://{{ .Address }}:{{ .Port }}"
         {{- end }}
+        {{- range service "frostor-ario-node-core" }}
+        ARNS_CRAWL_GATEWAY="http://{{ .Address }}:{{ .Port }}"
+        {{- end }}
         EOF
         env = true
         destination = "local/config.env"
