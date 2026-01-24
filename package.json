@@ -29,6 +29,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.0",
+    "@permaweb/aoconnect": "^0.0.92",
     "@types/cheerio": "^0.22.35",
     "bullmq": "^5.56.8",
     "cheerio": "^1.2.0",
@@ -68,8 +69,7 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "@dha-team/arbundles": "1.0.3",
-    "@permaweb/aoconnect": "0.0.92"
+    "@dha-team/arbundles": "1.0.3"
   },
   "jest": {
     "moduleFileExtensions": [

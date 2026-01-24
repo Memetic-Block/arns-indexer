@@ -82,6 +82,39 @@ When enabled, crawls text/HTML content from resolved ANT targets and stores pars
 | `CRAWL_BATCH_SIZE` | `50` | Number of targets to crawl per batch |
 | `CRAWL_CONCURRENCY` | `2` | Concurrent crawl operations |
 
+### ARNS Name Filtering
+Filter ARNS names processed by each queue stage independently. Useful for restricting indexing to specific names or excluding problematic ones.
+
+**Format:** Comma-separated list of ARNS names (case-sensitive), or `*` for all names.
+
+**Logic:** A name passes if it satisfies BOTH conditions:
+- Whitelist is empty, OR name is in whitelist, OR whitelist is `*`
+- Blacklist is empty, OR name is NOT in blacklist (blacklist `*` denies all)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ARNS_DISCOVERY_WHITELIST` | _(empty)_ | ARNS names to include during discovery (empty = all) |
+| `ARNS_DISCOVERY_BLACKLIST` | _(empty)_ | ARNS names to exclude during discovery |
+| `TARGET_RESOLUTION_WHITELIST` | _(empty)_ | ARNS names to include during target resolution |
+| `TARGET_RESOLUTION_BLACKLIST` | _(empty)_ | ARNS names to exclude during target resolution |
+| `CRAWL_WHITELIST` | _(empty)_ | ARNS names to include during content crawling |
+| `CRAWL_BLACKLIST` | _(empty)_ | ARNS names to exclude during content crawling |
+
+**Examples:**
+```bash
+# Only index these specific names
+ARNS_DISCOVERY_WHITELIST=ardrive,arweave,arns
+
+# Exclude problematic names from crawling
+CRAWL_BLACKLIST=spam-site,broken-manifest
+
+# Only crawl a single name for testing
+CRAWL_WHITELIST=my-test-site
+
+# Disable all crawling via blacklist
+CRAWL_BLACKLIST=*
+```
+
 ### Redis
 | Variable | Description |
 |----------|-------------|

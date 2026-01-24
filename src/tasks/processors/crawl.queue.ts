@@ -15,6 +15,8 @@ import {
   CrawlStatus,
   TargetCategory
 } from '../../arns/schema/ant-resolved-target.entity'
+import { AntRecord } from '../../arns/schema/ant-record.entity'
+import { ArnsRecord } from '../../arns/schema/arns-record.entity'
 import { CrawledDocument } from '../../arns/schema/crawled-document.entity'
 import { PathManifest } from '../../util/path-manifest.interface'
 
@@ -42,6 +44,8 @@ export class CrawlQueue extends WorkerHost {
   private readonly arweaveGateway: string
   private readonly batchSize: number
   private readonly concurrency: number
+  private readonly crawlWhitelist: string[] | '*' | null
+  private readonly crawlBlacklist: string[] | '*' | null
 
   constructor(
     private readonly config: ConfigService<{
@@ -49,6 +53,8 @@ export class CrawlQueue extends WorkerHost {
       ARNS_CRAWL_GATEWAY: string
       CRAWL_BATCH_SIZE: string
       CRAWL_CONCURRENCY: string
+      CRAWL_WHITELIST: string
+      CRAWL_BLACKLIST: string
     }>,
     @InjectQueue('ant-crawl-queue')
     private readonly crawlQueue: Queue,
@@ -70,11 +76,45 @@ export class CrawlQueue extends WorkerHost {
     this.batchSize = this.parseIntConfig('CRAWL_BATCH_SIZE', 50)
     this.concurrency = this.parseIntConfig('CRAWL_CONCURRENCY', 2)
 
+    // Parse crawl whitelist/blacklist from env vars
+    this.crawlWhitelist = this.parseFilterList(
+      this.config.get<string>('CRAWL_WHITELIST', '')
+    )
+    this.crawlBlacklist = this.parseFilterList(
+      this.config.get<string>('CRAWL_BLACKLIST', '')
+    )
+
     this.logger.log(
       `Crawl queue configured: enabled=${this.crawlEnabled}, ` +
         `gateway=${this.arweaveGateway}, batchSize=${this.batchSize}, ` +
-        `concurrency=${this.concurrency}`
+        `concurrency=${this.concurrency}, ` +
+        `filters - whitelist: ${this.formatFilterForLog(this.crawlWhitelist)}, ` +
+        `blacklist: ${this.formatFilterForLog(this.crawlBlacklist)}`
     )
+  }
+
+  /**
+   * Parse a comma-separated filter list from env var.
+   * Returns '*' for wildcard, null for empty/unset, or array of names.
+   */
+  private parseFilterList(value: string): string[] | '*' | null {
+    if (!value || value.trim() === '') {
+      return null
+    }
+    const trimmed = value.trim()
+    if (trimmed === '*') {
+      return '*'
+    }
+    return trimmed
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+  }
+
+  private formatFilterForLog(filter: string[] | '*' | null): string {
+    if (filter === null) return 'none'
+    if (filter === '*') return '*'
+    return `[${filter.length} names]`
   }
 
   private parseIntConfig(key: string, defaultValue: number): number {
@@ -116,6 +156,12 @@ export class CrawlQueue extends WorkerHost {
   private async processCrawlTargets(): Promise<void> {
     this.logger.log('Starting batch content crawl')
 
+    // If blacklist is '*', deny all - skip processing
+    if (this.crawlBlacklist === '*') {
+      this.logger.log('Crawl blacklist is *, skipping all targets')
+      return
+    }
+
     let totalCrawled = 0
     let totalSkipped = 0
     let totalFailed = 0
@@ -124,11 +170,8 @@ export class CrawlQueue extends WorkerHost {
     while (true) {
       batchNumber++
 
-      // Find targets with pending crawl status
-      const pendingTargets = await this.resolvedTargetRepository.find({
-        where: { crawlStatus: CrawlStatus.PENDING },
-        take: this.batchSize
-      })
+      // Find targets with pending crawl status, filtered by ARNS name
+      const pendingTargets = await this.findPendingCrawlTargets()
 
       if (pendingTargets.length === 0) {
         this.logger.log(
@@ -181,6 +224,33 @@ export class CrawlQueue extends WorkerHost {
       `[alarm=crawl-complete] Crawl complete after ${batchNumber} batches: ` +
         `crawled=${totalCrawled}, skipped=${totalSkipped}, failed=${totalFailed}`
     )
+  }
+
+  /**
+   * Find pending crawl targets filtered by ARNS name whitelist/blacklist
+   */
+  private async findPendingCrawlTargets(): Promise<AntResolvedTarget[]> {
+    const queryBuilder = this.resolvedTargetRepository
+      .createQueryBuilder('art')
+      .innerJoin(AntRecord, 'ant', 'ant.transactionId = art.transactionId')
+      .innerJoin(ArnsRecord, 'arns', 'arns.name = ant.name')
+      .where('art.crawlStatus = :status', { status: CrawlStatus.PENDING })
+
+    // Apply whitelist filter (if set and not '*')
+    if (this.crawlWhitelist !== null && this.crawlWhitelist !== '*') {
+      queryBuilder.andWhere('arns.name IN (:...whitelist)', {
+        whitelist: this.crawlWhitelist
+      })
+    }
+
+    // Apply blacklist filter (if set)
+    if (this.crawlBlacklist !== null) {
+      queryBuilder.andWhere('arns.name NOT IN (:...blacklist)', {
+        blacklist: this.crawlBlacklist
+      })
+    }
+
+    return queryBuilder.take(this.batchSize).getMany()
   }
 
   /**
