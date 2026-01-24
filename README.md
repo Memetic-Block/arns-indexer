@@ -12,6 +12,8 @@ Well look no further!  ArNS Indexer is a microservice built on the NestJS framew
 1) Fetch all ArNS records
 2) Fetch all ANT records (& controllers)
 3) Archive expired ArNS and ANT lease records
+4) Resolve ANT targets to determine content type (manifest, AO process, or transaction)
+5) Crawl text/HTML content from resolved targets (optional)
 
 ArNS Indexer serves as a data bridge between legacy AO and hyper-aos while ArNS processes remain accessible only on legacynet.  Eventually, this will be replaced by dedicated hyper-aos processes or a hyperbeam device.
 
@@ -40,42 +42,78 @@ $ npm run start:prod
 ```
 
 ## Environment
+
 ### Runtime
-- `PORT` - The port you want ArNS Indexer to run on (for healthchecks)
-- `DO_CLEAN` - `true` or `false` (default)
-  on startup, ArNS Indexer will wipe the task queue
-- `ARNS_QUEUE_TTL_MS` - The cadence of the ArNS records discovery queue (defaults to 86400000 (1 day))
-- `SKIP_EXPIRED_RECORDS` - `true` (default) or `false`
-  When `true`, expired lease records fetched from the network are skipped during indexing to prevent re-inserting archived records
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | - | The port ArNS Indexer runs on (for healthchecks) |
+| `DO_CLEAN` | `false` | On startup, wipe the task queue |
+| `ARNS_QUEUE_TTL_MS` | `86400000` (1 day) | The cadence of the ArNS records discovery queue |
+| `SKIP_EXPIRED_RECORDS` | `true` | Skip expired lease records during indexing to prevent re-inserting archived records |
 
 ### AO Compute Unit
-- `CU_URL` - The URL for the Compute Unit the indexer will use to resolve records.  As ArNS Indexer uses the [ar.io sdk](https://github.com/ar-io/ar-io-sdk), this defaults to `https://cu.ardrive.io`.  It is strongly encouraged to run your own CU as to 1) not spam the ardrive CU and 2) ensure records have a good chance to resolve as you will have control over the behavior of the CU (such as taking snapshots)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CU_URL` | `https://cu.ardrive.io` | The URL for the Compute Unit to resolve records. It is strongly encouraged to run your own CU to avoid spamming public CUs and ensure better control over resolution behavior (e.g., snapshots) |
+
+### Target Resolution
+When enabled, resolves ANT transaction targets to determine their content type (manifest, AO process, or transaction) and validates manifests.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_TARGET_RESOLUTION` | `false` | Enable ANT target resolution after record discovery |
+| `ARNS_CRAWL_GATEWAY` | `arweave.net` | Arweave gateway for fetching transaction tags and content |
+| `MAX_RESOLVE_RETRIES` | `3` | Max retry attempts for failed resolutions |
+| `RESOLVE_RETRY_DELAY_MS` | `7200000` (2 hours) | Delay between retry attempts |
+| `RESOLUTION_BATCH_SIZE` | `100` | Number of targets to process per batch |
+| `RESOLUTION_CONCURRENCY` | `2` | Concurrent resolution operations |
+
+### Content Crawling
+When enabled, crawls text/HTML content from resolved ANT targets and stores parsed documents. Supports manifest-aware crawling with robots.txt/sitemap.xml support.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CRAWL_ANTS_ENABLED` | `false` | Enable content crawling after target resolution |
+| `CRAWL_MAX_DEPTH` | `10` | Max link-following depth within manifests |
+| `CRAWL_MAX_BODY_SIZE` | `5242880` (5MB) | Max body size in bytes, truncate if exceeded |
+| `CRAWL_MAX_TITLE_SIZE` | `1024` | Max title size in bytes |
+| `CRAWL_MAX_HEADINGS_COUNT` | `25` | Max headings to extract per document |
+| `CRAWL_MAX_LINKS_COUNT` | `25` | Max links to index per document |
+| `CRAWL_BATCH_SIZE` | `50` | Number of targets to crawl per batch |
+| `CRAWL_CONCURRENCY` | `2` | Concurrent crawl operations |
 
 ### Redis
-- `REDIS_MODE` - `standalone` or `sentinel` (for sentinel clusters)
+| Variable | Description |
+|----------|-------------|
+| `REDIS_MODE` | `standalone` or `sentinel` (for sentinel clusters) |
 
 #### Standalone
-- `REDIS_HOST` - redis hostname
-- `REDIS_PORT` - redis port
+| Variable | Description |
+|----------|-------------|
+| `REDIS_HOST` | Redis hostname |
+| `REDIS_PORT` | Redis port |
 
 #### Sentinel
-- `REDIS_MASTER_NAME` - redis master node name
-- `REDIS_SENTINEL_1_HOST` - redis sentinel 1 host
-- `REDIS_SENTINEL_1_PORT` - redis sentinel 1 port
-- `REDIS_SENTINEL_2_HOST` - redis sentinel 2 host
-- `REDIS_SENTINEL_2_PORT` - redis sentinel 2 port
-- `REDIS_SENTINEL_3_HOST` - redis sentinel 3 host
-- `REDIS_SENTINEL_3_PORT` - redis sentinal 3 port
+| Variable | Description |
+|----------|-------------|
+| `REDIS_MASTER_NAME` | Redis master node name |
+| `REDIS_SENTINEL_1_HOST` | Redis sentinel 1 host |
+| `REDIS_SENTINEL_1_PORT` | Redis sentinel 1 port |
+| `REDIS_SENTINEL_2_HOST` | Redis sentinel 2 host |
+| `REDIS_SENTINEL_2_PORT` | Redis sentinel 2 port |
+| `REDIS_SENTINEL_3_HOST` | Redis sentinel 3 host |
+| `REDIS_SENTINEL_3_PORT` | Redis sentinel 3 port |
 
 ### Postgres
-- `DB_HOST` - postres host
-- `DB_PORT` - postgres port
-- `DB_NAME` - db name to use
-- `DB_USERNAME` - postres user
-- `DB_PASSWORD` - postgres password
-- `DB_MIGRATIONS_RUN` - This should be set to `true` in production environments
-so that db migrations run on startup
-- `DB_SYNCHRONIZE` - Sync the database with entity classes on startup. This should **NOT** be set to `true` in production environments as it can potentially wipe data as it reconfigures tables in the db to match entity classes.  This is convenient to use while developing locally.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | - | Postgres host |
+| `DB_PORT` | - | Postgres port |
+| `DB_NAME` | - | Database name |
+| `DB_USERNAME` | - | Postgres user |
+| `DB_PASSWORD` | - | Postgres password |
+| `DB_MIGRATIONS_RUN` | - | Set to `true` in production to run migrations on startup |
+| `DB_SYNCHRONIZE` | - | Sync database with entity classes. **Never use in production** as it can wipe data |
 
 ## Run tests
 
@@ -118,6 +156,17 @@ migrations: [
 ...
 ```
 
+## Queue Flow
+
+The discovery queue runs in this order:
+1. `discover-arns-records` - Fetches and upserts ArNS records from the network
+2. `discover-ant-records` - Fetches and upserts ANT records for each ArNS record
+3. `cleanup-expired-records` - Archives and deletes expired lease records
+4. `resolve-ant-targets` - (if enabled) Resolves ANT targets to determine content type
+5. `crawl-ant-targets` - (if enabled) Crawls text/HTML content from resolved targets
+
+The queue then re-queues the next discovery cycle.
+
 ## Expired Records Archival
 
 ArNS Indexer automatically archives expired lease records at the end of each discovery cycle. The archival process:
@@ -136,17 +185,48 @@ The archive tables contain all original fields plus:
 - `originalId` - The original record's ID
 - `originalCreatedAt` / `originalUpdatedAt` - Original timestamps
 
-### Queue Flow
+## ANT Target Resolution
 
-The discovery queue runs in this order:
-1. `discover-arns-records` - Fetches and upserts ArNS records from the network
-2. `discover-ant-records` - Fetches and upserts ANT records for each ArNS record
-3. `cleanup-expired-records` - Archives and deletes expired lease records, then re-queues the next cycle
+When `ENABLE_TARGET_RESOLUTION=true`, the indexer resolves each ANT transaction ID to determine:
+
+- **Content Type** - The `Content-Type` tag from the transaction
+- **Target Category** - One of:
+  - `manifest` - Arweave path manifest (`application/x.arweave-manifest+json`)
+  - `ao_process` - AO process (has `Data-Protocol: ao` and `Type: Process` tags)
+  - `transaction` - Regular Arweave transaction
+- **Manifest Validation** - For manifests, validates structure and checks for index/fallback paths
+
+Resolution results are stored in the `ant_resolved_target` table with retry logic for transient failures.
+
+## Content Crawling
+
+When `CRAWL_ANTS_ENABLED=true`, the indexer crawls content from resolved targets that are:
+- Text content (`text/*`, `text/html`, `application/xhtml+xml`)
+- Valid manifests with an index path
+
+### Crawled Document Schema
+
+Crawled documents are stored with:
+- `title` - Document title from `<title>` tag
+- `body` - Extracted body text (scripts/styles removed)
+- `metaDescription` - HTML meta description
+- `metaKeywords` - HTML meta keywords
+- `headings` - Array of h1-h6 heading content
+- `links` - Array of extracted links
+- `contentHash` - SHA-256 hash for deduplication
+
+### Manifest Crawling
+
+For manifest targets, the crawler:
+1. Fetches and parses `robots.txt` (if present) to determine allowed paths
+2. Fetches and parses `sitemap.xml` (if present) to discover pages
+3. Crawls the index page and follows internal links up to `CRAWL_MAX_DEPTH`
+4. Respects `robots.txt` rules when following links
+5. Stores `robots.txt` and `sitemap.xml` content on the target for caching
 
 ## Future Work
-1) Track ANT resolution failures in the database
-2) Runtime cluster support
-3) Postgres cluster support
+1) Runtime cluster support
+2) Postgres cluster support
 
 ## Contributing
 Feel free to open a pull request!
