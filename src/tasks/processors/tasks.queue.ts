@@ -46,9 +46,10 @@ export class TasksQueue extends WorkerHost {
         try {
           await this.arnsService.updateArNSRecordsIndex()
         } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error))
           this.logger.error(
-            `Exception during ARNs records discovery: ${error.message}`,
-            error.stack
+            `Exception during ARNs records discovery: ${err.message}`,
+            err.stack
           )
         }
 
@@ -58,9 +59,10 @@ export class TasksQueue extends WorkerHost {
         try {
           await this.arnsService.updateANTRecordsIndex()
         } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error))
           this.logger.error(
-            `Exception during ANT records discovery: ${error.message}`,
-            error.stack
+            `Exception during ANT records discovery: ${err.message}`,
+            err.stack
           )
         }
 
@@ -70,9 +72,10 @@ export class TasksQueue extends WorkerHost {
         try {
           await this.arnsService.archiveExpiredRecords()
         } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error))
           this.logger.error(
-            `Exception during expired records cleanup: ${error.message}`,
-            error.stack
+            `Exception during expired records cleanup: ${err.message}`,
+            err.stack
           )
         }
 

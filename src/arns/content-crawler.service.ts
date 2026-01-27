@@ -78,9 +78,16 @@ export class ContentCrawlerService {
     )
   }
 
-  private parseIntConfig(key: string, defaultValue: number): number {
-    const value =
-      this.configService.get<string>(key as any) ?? defaultValue.toString()
+  private parseIntConfig(
+    key:
+      | 'CRAWL_MAX_DEPTH'
+      | 'CRAWL_MAX_BODY_SIZE'
+      | 'CRAWL_MAX_TITLE_SIZE'
+      | 'CRAWL_MAX_HEADINGS_COUNT'
+      | 'CRAWL_MAX_LINKS_COUNT',
+    defaultValue: number
+  ): number {
+    const value = this.configService.get<string>(key) ?? defaultValue.toString()
     const parsed = parseInt(value, 10)
     if (isNaN(parsed) || parsed < 0) {
       this.logger.warn(
@@ -306,7 +313,7 @@ export class ContentCrawlerService {
       return {
         isValid: false,
         rules: null,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       }
     }
   }
@@ -414,7 +421,7 @@ export class ContentCrawlerService {
       return {
         isValid: false,
         entries: [],
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       }
     }
   }
@@ -426,7 +433,8 @@ export class ContentCrawlerService {
    */
   public extractManifestPaths(
     entries: SitemapEntry[],
-    manifestBaseUrl: string
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _manifestBaseUrl: string
   ): string[] {
     const paths: string[] = []
 

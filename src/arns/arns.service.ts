@@ -316,7 +316,9 @@ export class ArnsService {
 
     // Apply ARNS name filter
     const unfilteredCount = records.length
-    records = records.filter((record) => this.shouldProcessArnsName(record.name))
+    records = records.filter((record) =>
+      this.shouldProcessArnsName(record.name)
+    )
     if (records.length < unfilteredCount) {
       this.logger.log(
         `Filtered ANT update from [${unfilteredCount}] to [${records.length}] records by name filter`

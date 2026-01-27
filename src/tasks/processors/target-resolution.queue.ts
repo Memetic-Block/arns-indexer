@@ -161,9 +161,13 @@ export class TargetResolutionQueue extends WorkerHost {
             }
           } else {
             totalErrors++
+            const reason =
+              settledResult.reason instanceof Error
+                ? settledResult.reason
+                : new Error(String(settledResult.reason))
             this.logger.error(
-              `Error processing target: ${settledResult.reason?.message}`,
-              settledResult.reason?.stack
+              `Error processing target: ${reason.message}`,
+              reason.stack
             )
           }
         }
@@ -228,9 +232,10 @@ export class TargetResolutionQueue extends WorkerHost {
         )
       }
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
       this.logger.error(
-        `Error retrying target ${transactionId}: ${error.message}`,
-        error.stack
+        `Error retrying target ${transactionId}: ${err.message}`,
+        err.stack
       )
       throw error
     }

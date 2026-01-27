@@ -157,7 +157,11 @@ export class AntTargetResolutionService {
       })
     }
 
-    const result = await queryBuilder.limit(limit).getRawMany()
+    const result = await queryBuilder.limit(limit).getRawMany<{
+      transactionId: string
+      arnsName: string
+      undername: string
+    }>()
 
     return result.map((r) => ({
       transactionId: r.transactionId,
@@ -202,7 +206,14 @@ export class AntTargetResolutionService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const data = await response.json()
+      const data = (await response.json()) as {
+        errors?: { message: string }[]
+        data?: {
+          transaction?: {
+            tags?: { name: string; value: string }[]
+          }
+        }
+      }
 
       if (data.errors) {
         this.logger.warn(
@@ -218,10 +229,9 @@ export class AntTargetResolutionService {
       const tags: TransactionTags = {}
       for (const tag of data.data.transaction.tags || []) {
         // GraphQL incorrectly decodes '+' as space in URL-encoded strings
-        const name = tag.name
-        const value = tag.name === 'Content-Type'
-          ? tag.value.replace(/ /g, '+')
-          : tag.value
+        const name: string = tag.name
+        const value: string =
+          tag.name === 'Content-Type' ? tag.value.replace(/ /g, '+') : tag.value
         tags[name] = value
       }
 
@@ -231,12 +241,14 @@ export class AntTargetResolutionService {
         tags
       }
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
       this.logger.error(
-        `Failed to resolve tags for ${transactionId}: ${error.message}`
+        `Failed to resolve tags for ${transactionId}: ${errorMessage}`
       )
       return {
         status: 'error',
-        error: error.message
+        error: errorMessage
       }
     }
   }
@@ -280,20 +292,20 @@ export class AntTargetResolutionService {
         }
       }
 
-      const manifest: PathManifest = await response.json()
+      const manifest = (await response.json()) as PathManifest
 
       // Validate manifest structure
       if (manifest.manifest !== 'arweave/paths') {
         return {
           isValid: false,
-          error: `Invalid manifest type: ${manifest.manifest}`
+          error: `Invalid manifest type: ${String(manifest.manifest)}`
         }
       }
 
       if (manifest.version !== '0.2.0') {
         return {
           isValid: false,
-          error: `Unsupported manifest version: ${manifest.version}`
+          error: `Unsupported manifest version: ${String(manifest.version)}`
         }
       }
 
@@ -310,7 +322,7 @@ export class AntTargetResolutionService {
     } catch (error) {
       return {
         isValid: false,
-        error: `Failed to parse manifest: ${error.message}`
+        error: `Failed to parse manifest: ${error instanceof Error ? error.message : String(error)}`
       }
     }
   }
@@ -449,7 +461,7 @@ export class AntTargetResolutionService {
       .addSelect('COUNT(*)', 'count')
       .where('target.targetCategory IS NOT NULL')
       .groupBy('target.targetCategory')
-      .getRawMany()
+      .getRawMany<{ category: string; count: string }>()
 
     const byCategory: Record<string, number> = {}
     for (const row of categoryResults) {

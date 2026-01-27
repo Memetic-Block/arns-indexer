@@ -62,9 +62,10 @@ export class TasksService implements OnApplicationBootstrap {
         await this.antTargetResolutionQueue.obliterate({ force: true })
         await this.antCrawlQueue.obliterate({ force: true })
       } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
         this.logger.error(
-          `Failed cleaning up queues: ${error.message}`,
-          error.stack
+          `Failed cleaning up queues: ${err.message}`,
+          err.stack
         )
       }
     }
@@ -72,10 +73,11 @@ export class TasksService implements OnApplicationBootstrap {
     this.logger.log(
       `Bootstrapping Tasks service with a new arns records discovery queue`
     )
-    this.queueArnsRecordsDiscovery().catch((error) => {
+    this.queueArnsRecordsDiscovery().catch((error: unknown) => {
+      const err = error instanceof Error ? error : new Error(String(error))
       this.logger.error(
-        `Failed to queue initial ARNs records discovery job: ${error.message}`,
-        error.stack
+        `Failed to queue initial ARNs records discovery job: ${err.message}`,
+        err.stack
       )
     })
   }
@@ -169,10 +171,11 @@ export class TasksService implements OnApplicationBootstrap {
           `(target resolution: ${this.enableTargetResolution}, crawl: ${this.crawlEnabled})`
       )
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
       this.logger.error(
         `Failed adding ArNS records discovery job to queue: ` +
-          `${error.message}`,
-        error.stack
+          `${err.message}`,
+        err.stack
       )
     }
 

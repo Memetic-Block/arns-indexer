@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { ConfigModule } from '@nestjs/config'
 import { getRepositoryToken } from '@nestjs/typeorm'
 import { DataSource } from 'typeorm'
-import * as fs from 'fs/promises'
 
 import { ArnsService } from './arns.service'
 import { AntRecord } from './schema/ant-record.entity'
@@ -11,7 +10,8 @@ import { ArnsRecord } from './schema/arns-record.entity'
 import { ArnsRecordArchive } from './schema/arns-record-archive.entity'
 
 describe('ArnsService', () => {
-  let service: ArnsService
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let _service: ArnsService
   // const mockRecords: AntRecord[] = [
   //   {
   //     id: 1,
@@ -103,10 +103,10 @@ describe('ArnsService', () => {
 
 describe('ArnsService - archiveExpiredRecords', () => {
   let service: ArnsService
-  let mockArnsRecordsRepository: any
-  let mockAntRecordsRepository: any
-  let mockDataSource: any
-  let mockManager: any
+  let mockArnsRecordsRepository: { find: jest.Mock }
+  let mockAntRecordsRepository: { find: jest.Mock }
+  let mockDataSource: { transaction: jest.Mock }
+  let mockManager: { create: jest.Mock; save: jest.Mock; delete: jest.Mock }
 
   const now = Date.now()
   const pastTimestamp = now - 86400000 // 1 day ago
@@ -125,7 +125,8 @@ describe('ArnsService - archiveExpiredRecords', () => {
     undernameLimit: 10
   }
 
-  const activeLeaseRecord: Partial<ArnsRecord> = {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _activeLeaseRecord: Partial<ArnsRecord> = {
     id: 2,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -138,7 +139,8 @@ describe('ArnsService - archiveExpiredRecords', () => {
     undernameLimit: 10
   }
 
-  const permabuyRecord: Partial<ArnsRecord> = {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _permabuyRecord: Partial<ArnsRecord> = {
     id: 3,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -171,13 +173,16 @@ describe('ArnsService - archiveExpiredRecords', () => {
 
   beforeEach(async () => {
     mockManager = {
-      create: jest.fn((entity, data) => data),
+      create: jest.fn(<T>(_entity: unknown, data: T): T => data),
       save: jest.fn().mockResolvedValue(undefined),
       delete: jest.fn().mockResolvedValue({ affected: 1 })
     }
 
     mockDataSource = {
-      transaction: jest.fn((callback) => callback(mockManager))
+      transaction: jest.fn(
+        (callback: (manager: typeof mockManager) => Promise<void>) =>
+          callback(mockManager)
+      )
     }
 
     mockArnsRecordsRepository = {

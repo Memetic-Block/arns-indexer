@@ -8,6 +8,7 @@ import { InjectQueue } from '@nestjs/bullmq'
 
 import {
   ContentCrawlerService,
+  ParsedDocument,
   RobotsTxtRules
 } from '../../arns/content-crawler.service'
 import {
@@ -160,8 +161,17 @@ export class CrawlQueue extends WorkerHost {
     return base
   }
 
-  private parseIntConfig(key: string, defaultValue: number): number {
-    const value = this.config.get<string>(key as any) ?? defaultValue.toString()
+  private parseIntConfig(
+    key:
+      | 'ARNS_CRAWL_GATEWAY'
+      | 'CRAWL_ANTS_ENABLED'
+      | 'CRAWL_BATCH_SIZE'
+      | 'CRAWL_CONCURRENCY'
+      | 'CRAWL_WHITELIST'
+      | 'CRAWL_BLACKLIST',
+    defaultValue: number
+  ): number {
+    const value = this.config.get<string>(key) ?? defaultValue.toString()
     const parsed = parseInt(value, 10)
     if (isNaN(parsed) || parsed < 1) {
       return defaultValue
@@ -249,9 +259,13 @@ export class CrawlQueue extends WorkerHost {
             }
           } else {
             totalFailed++
+            const reason =
+              result.reason instanceof Error
+                ? result.reason
+                : new Error(String(result.reason))
             this.logger.error(
-              `Error crawling target ${target.transactionId}: ${result.reason?.message}`,
-              result.reason?.stack
+              `Error crawling target ${target.transactionId}: ${reason.message}`,
+              reason.stack
             )
           }
         }
@@ -335,9 +349,10 @@ export class CrawlQueue extends WorkerHost {
       )
       return 'skipped'
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
       this.logger.error(
-        `Failed to crawl target ${transactionId}: ${error.message}`,
-        error.stack
+        `Failed to crawl target ${transactionId}: ${err.message}`,
+        err.stack
       )
 
       await this.resolvedTargetRepository.update(
@@ -363,7 +378,7 @@ export class CrawlQueue extends WorkerHost {
     const content = await response.text()
     const url = `https://${this.arweaveGateway}/${transactionId}`
 
-    let parsed
+    let parsed: ParsedDocument
     if (this.contentCrawlerService.isHtmlContentType(contentType)) {
       parsed = this.contentCrawlerService.parseHtml(content, url)
     } else {
@@ -377,7 +392,7 @@ export class CrawlQueue extends WorkerHost {
       undername: target.undername,
       manifestPath: null,
       url: this.buildWayfinderUrl(target.arnsName, target.undername, null),
-      contentType,
+      contentType: contentType ?? null,
       depth: 0,
       ...parsed
     })
@@ -394,7 +409,7 @@ export class CrawlQueue extends WorkerHost {
 
   /**
    * Crawl a manifest target
-   * 
+   *
    * Strategy:
    * 1. Fetch and parse robots.txt (if exists) - respect its crawl rules
    * 2. If sitemap.xml exists, use it as the source of crawl targets
@@ -411,7 +426,7 @@ export class CrawlQueue extends WorkerHost {
         `Failed to fetch manifest: HTTP ${manifestResponse.status}`
       )
     }
-    const manifest: PathManifest = await manifestResponse.json()
+    const manifest = (await manifestResponse.json()) as PathManifest
 
     const baseUrl = `https://${this.arweaveGateway}/${transactionId}`
     const config = this.contentCrawlerService.getConfig()
@@ -452,7 +467,11 @@ export class CrawlQueue extends WorkerHost {
               arnsName: target.arnsName,
               undername: target.undername,
               manifestPath: 'robots.txt',
-              url: this.buildWayfinderUrl(target.arnsName, target.undername, 'robots.txt'),
+              url: this.buildWayfinderUrl(
+                target.arnsName,
+                target.undername,
+                'robots.txt'
+              ),
               contentType: 'text/plain',
               depth: 0,
               ...robotsParsed
@@ -460,8 +479,10 @@ export class CrawlQueue extends WorkerHost {
           }
         }
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
         this.logger.warn(
-          `Failed to fetch robots.txt for ${transactionId}: ${error.message}`
+          `Failed to fetch robots.txt for ${transactionId}: ${errorMessage}`
         )
       }
     }
@@ -506,7 +527,11 @@ export class CrawlQueue extends WorkerHost {
               arnsName: target.arnsName,
               undername: target.undername,
               manifestPath: sitemapPath,
-              url: this.buildWayfinderUrl(target.arnsName, target.undername, sitemapPath),
+              url: this.buildWayfinderUrl(
+                target.arnsName,
+                target.undername,
+                sitemapPath
+              ),
               contentType: 'application/xml',
               depth: 0,
               ...sitemapParsed
@@ -526,12 +551,12 @@ export class CrawlQueue extends WorkerHost {
               )
               for (const path of manifestPaths) {
                 let normalizedPath = path.replace(/^\//, '')
-                
+
                 // Root path maps to manifest index
                 if (normalizedPath === '' && manifest.index?.path) {
                   normalizedPath = manifest.index.path
                 }
-                
+
                 // Try to find the path in manifest, also check for directory index pattern
                 // e.g., "about" -> "about/index.html"
                 let manifestPath = normalizedPath
@@ -542,7 +567,7 @@ export class CrawlQueue extends WorkerHost {
                     manifestPath = withIndex
                   }
                 }
-                
+
                 if (
                   manifest.paths[manifestPath] &&
                   !sitemapTargets.includes(manifestPath)
@@ -560,8 +585,10 @@ export class CrawlQueue extends WorkerHost {
             }
           }
         } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error)
           this.logger.warn(
-            `Failed to fetch ${sitemapPath} for ${transactionId}: ${error.message}`
+            `Failed to fetch ${sitemapPath} for ${transactionId}: ${errorMessage}`
           )
         }
       }
@@ -682,7 +709,7 @@ export class CrawlQueue extends WorkerHost {
         return
       }
 
-      let parsed
+      let parsed: ParsedDocument
       if (this.contentCrawlerService.isHtmlContentType(contentType)) {
         parsed = this.contentCrawlerService.parseHtml(content, pathUrl)
 
@@ -720,14 +747,20 @@ export class CrawlQueue extends WorkerHost {
         arnsName: context.arnsName,
         undername: context.undername,
         manifestPath,
-        url: this.buildWayfinderUrl(context.arnsName, context.undername, manifestPath),
-        contentType,
+        url: this.buildWayfinderUrl(
+          context.arnsName,
+          context.undername,
+          manifestPath
+        ),
+        contentType: contentType ?? null,
         depth,
         ...parsed
       })
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
       this.logger.error(
-        `Error crawling ${manifestPath} for ${transactionId}: ${error.message}`
+        `Error crawling ${manifestPath} for ${transactionId}: ${errorMessage}`
       )
     }
   }
@@ -762,7 +795,7 @@ export class CrawlQueue extends WorkerHost {
         `Failed to fetch manifest: HTTP ${manifestResponse.status}`
       )
     }
-    const manifest: PathManifest = await manifestResponse.json()
+    const manifest = (await manifestResponse.json()) as PathManifest
 
     const baseUrl = `https://${this.arweaveGateway}/${transactionId}`
     const config = this.contentCrawlerService.getConfig()

@@ -41,32 +41,52 @@ import { AddArnsNameToResolvedTargetAndCrawledDocument1769535332651 } from './mi
           infer: true
         })
 
+        const redisHost = String(
+          config.get<string>('REDIS_HOST', { infer: true }) ?? 'localhost'
+        )
+        const redisPort = Number(
+          config.get<number>('REDIS_PORT', { infer: true }) ?? 6379
+        )
+
         let connection: ConnectionOptions = {
-          host: config.get<string>('REDIS_HOST', { infer: true }),
-          port: config.get<number>('REDIS_PORT', { infer: true })
+          host: redisHost,
+          port: redisPort
         }
 
         if (redisMode === 'sentinel') {
-          const name = config.get<string>('REDIS_MASTER_NAME', { infer: true })
+          const name = String(
+            config.get<string>('REDIS_MASTER_NAME', { infer: true }) ??
+              'mymaster'
+          )
+          const sentinel1Host = String(
+            config.get<string>('REDIS_SENTINEL_1_HOST', { infer: true }) ??
+              'localhost'
+          )
+          const sentinel1Port = Number(
+            config.get<number>('REDIS_SENTINEL_1_PORT', { infer: true }) ??
+              26379
+          )
+          const sentinel2Host = String(
+            config.get<string>('REDIS_SENTINEL_2_HOST', { infer: true }) ??
+              'localhost'
+          )
+          const sentinel2Port = Number(
+            config.get<number>('REDIS_SENTINEL_2_PORT', { infer: true }) ??
+              26380
+          )
+          const sentinel3Host = String(
+            config.get<string>('REDIS_SENTINEL_3_HOST', { infer: true }) ??
+              'localhost'
+          )
+          const sentinel3Port = Number(
+            config.get<number>('REDIS_SENTINEL_3_PORT', { infer: true }) ??
+              26381
+          )
+
           const sentinels = [
-            {
-              host: config.get<string>('REDIS_SENTINEL_1_HOST', {
-                infer: true
-              }),
-              port: config.get<number>('REDIS_SENTINEL_1_PORT', { infer: true })
-            },
-            {
-              host: config.get<string>('REDIS_SENTINEL_2_HOST', {
-                infer: true
-              }),
-              port: config.get<number>('REDIS_SENTINEL_2_PORT', { infer: true })
-            },
-            {
-              host: config.get<string>('REDIS_SENTINEL_3_HOST', {
-                infer: true
-              }),
-              port: config.get<number>('REDIS_SENTINEL_3_PORT', { infer: true })
-            }
+            { host: sentinel1Host, port: sentinel1Port },
+            { host: sentinel2Host, port: sentinel2Port },
+            { host: sentinel3Host, port: sentinel3Port }
           ]
           connection = { sentinels, name }
         }
@@ -100,16 +120,31 @@ import { AddArnsNameToResolvedTargetAndCrawledDocument1769535332651 } from './mi
         logger.log(`DB_SYNCHRONIZE: ${synchronize}`)
         logger.log(`DB_MIGRATIONS_RUN: ${migrationsRun}`)
 
+        const dbHost = String(
+          config.get<string>('DB_HOST', { infer: true }) ?? 'localhost'
+        )
+        const dbPort = Number(
+          config.get<number>('DB_PORT', { infer: true }) ?? 5432
+        )
+        const dbUsername = String(
+          config.get<string>('DB_USERNAME', { infer: true }) ?? 'postgres'
+        )
+        const dbPassword = String(
+          config.get<string>('DB_PASSWORD', { infer: true }) ?? 'postgres'
+        )
+        const dbName = String(
+          config.get<string>('DB_NAME', { infer: true }) ?? 'arns'
+        )
+
         return {
           type: 'postgres',
-          host: config.get<string>('DB_HOST', { infer: true }),
-          port: config.get<number>('DB_PORT', { infer: true }),
-          username: config.get<string>('DB_USERNAME', { infer: true }),
-          password: config.get<string>('DB_PASSWORD', { infer: true }),
-          database: config.get<string>('DB_NAME', { infer: true }),
+          host: dbHost,
+          port: dbPort,
+          username: dbUsername,
+          password: dbPassword,
+          database: dbName,
           entities: dbEntities,
-          synchronize:
-            config.get<string>('DB_SYNCHRONIZE', { infer: true }) === 'true',
+          synchronize,
           migrations: [
             CreateArnsAndAntRecordsTables1761260838990,
             AddControllersToAntRecordTable1761423495919,
@@ -119,8 +154,7 @@ import { AddArnsNameToResolvedTargetAndCrawledDocument1769535332651 } from './mi
             AddCrawlStatusAndCrawledDocument1769500000000,
             AddArnsNameToResolvedTargetAndCrawledDocument1769535332651
           ],
-          migrationsRun:
-            config.get<string>('DB_MIGRATIONS_RUN', { infer: true }) === 'true'
+          migrationsRun
         }
       }
     }),
