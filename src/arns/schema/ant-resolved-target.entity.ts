@@ -3,7 +3,8 @@ import {
   Column,
   PrimaryColumn,
   CreateDateColumn,
-  UpdateDateColumn
+  UpdateDateColumn,
+  Index
 } from 'typeorm'
 
 export enum TargetCategory {
@@ -38,6 +39,14 @@ export interface ManifestValidation {
 export class AntResolvedTarget {
   @PrimaryColumn({ type: 'varchar' })
   transactionId: string
+
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  arnsName: string | null
+
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  undername: string | null
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   public createdAt: Date

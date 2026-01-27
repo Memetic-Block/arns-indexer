@@ -312,7 +312,17 @@ export class ArnsService {
   }
 
   public async updateANTRecordsIndex() {
-    const records = await this.arnsRecordsRepository.find()
+    let records = await this.arnsRecordsRepository.find()
+
+    // Apply ARNS name filter
+    const unfilteredCount = records.length
+    records = records.filter((record) => this.shouldProcessArnsName(record.name))
+    if (records.length < unfilteredCount) {
+      this.logger.log(
+        `Filtered ANT update from [${unfilteredCount}] to [${records.length}] records by name filter`
+      )
+    }
+
     this.logger.log(`Updating ANT records for [${records.length}] ArNS records`)
 
     for (let i = 0; i < records.length; i++) {

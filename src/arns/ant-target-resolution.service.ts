@@ -25,6 +25,12 @@ export interface ResolutionResult {
   error?: string
 }
 
+export interface UnresolvedTarget {
+  transactionId: string
+  arnsName: string
+  undername: string
+}
+
 @Injectable()
 export class AntTargetResolutionService {
   private readonly logger: Logger = new Logger(AntTargetResolutionService.name)
@@ -103,7 +109,7 @@ export class AntTargetResolutionService {
   public async findUnresolvedTargets(
     maxRetries: number,
     limit: number = 100
-  ): Promise<string[]> {
+  ): Promise<UnresolvedTarget[]> {
     // If blacklist is '*', deny all - return empty
     if (this.resolutionBlacklist === '*') {
       this.logger.debug('Resolution blacklist is *, skipping all targets')
@@ -113,7 +119,10 @@ export class AntTargetResolutionService {
     // Get all unique transaction IDs from AntRecord that need resolution
     const queryBuilder = this.antRecordRepository
       .createQueryBuilder('ant')
-      .select('DISTINCT ant.transactionId', 'transactionId')
+      .select('ant.transactionId', 'transactionId')
+      .addSelect('ant.name', 'arnsName')
+      .addSelect('ant.undername', 'undername')
+      .distinct(true)
       .innerJoin(ArnsRecord, 'arns', 'arns.name = ant.name')
       .leftJoin(
         AntResolvedTarget,
@@ -150,7 +159,11 @@ export class AntTargetResolutionService {
 
     const result = await queryBuilder.limit(limit).getRawMany()
 
-    return result.map((r) => r.transactionId)
+    return result.map((r) => ({
+      transactionId: r.transactionId,
+      arnsName: r.arnsName,
+      undername: r.undername
+    }))
   }
 
   /**
@@ -204,7 +217,12 @@ export class AntTargetResolutionService {
 
       const tags: TransactionTags = {}
       for (const tag of data.data.transaction.tags || []) {
-        tags[tag.name] = tag.value
+        // GraphQL incorrectly decodes '+' as space in URL-encoded strings
+        const name = tag.name
+        const value = tag.name === 'Content-Type'
+          ? tag.value.replace(/ /g, '+')
+          : tag.value
+        tags[name] = value
       }
 
       return {
@@ -301,83 +319,96 @@ export class AntTargetResolutionService {
    * Process a single target transaction ID
    */
   public async processTarget(
-    transactionId: string,
+    target: UnresolvedTarget,
     maxRetries: number
   ): Promise<{
     resolved: boolean
     shouldRetry: boolean
     retryCount: number
   }> {
+    const { transactionId, arnsName, undername } = target
+
     // Get or create the resolved target record
-    let target = await this.resolvedTargetRepository.findOne({
+    let resolvedTarget = await this.resolvedTargetRepository.findOne({
       where: { transactionId }
     })
 
-    if (!target) {
-      target = this.resolvedTargetRepository.create({
+    if (!resolvedTarget) {
+      resolvedTarget = this.resolvedTargetRepository.create({
         transactionId,
+        arnsName,
+        undername,
         status: ResolutionStatus.PENDING,
         retryCount: 0
       })
+    } else {
+      // Update arnsName and undername if not set (for existing records)
+      if (!resolvedTarget.arnsName) {
+        resolvedTarget.arnsName = arnsName
+      }
+      if (!resolvedTarget.undername) {
+        resolvedTarget.undername = undername
+      }
     }
 
     // Resolve transaction tags
     const result = await this.resolveTransactionTags(transactionId)
 
     if (result.status === 'resolved') {
-      target.status = ResolutionStatus.RESOLVED
-      target.contentType = result.contentType || null
-      target.targetCategory = this.categorizeTarget(
+      resolvedTarget.status = ResolutionStatus.RESOLVED
+      resolvedTarget.contentType = result.contentType || null
+      resolvedTarget.targetCategory = this.categorizeTarget(
         result.contentType || null,
         result.tags || {}
       )
-      target.resolvedAt = new Date()
+      resolvedTarget.resolvedAt = new Date()
 
       // Validate manifest if applicable
-      if (target.targetCategory === TargetCategory.MANIFEST) {
-        target.manifestValidation = await this.validateManifest(transactionId)
+      if (resolvedTarget.targetCategory === TargetCategory.MANIFEST) {
+        resolvedTarget.manifestValidation =
+          await this.validateManifest(transactionId)
       }
 
       // Set crawl status based on content type and crawl feature flag
-      target.crawlStatus = this.determineCrawlStatus(target)
+      resolvedTarget.crawlStatus = this.determineCrawlStatus(resolvedTarget)
 
-      await this.resolvedTargetRepository.save(target)
+      await this.resolvedTargetRepository.save(resolvedTarget)
 
       this.logger.log(
         `Resolved target ${transactionId}: ` +
-          `${target.targetCategory} (${target.contentType}), crawlStatus=${target.crawlStatus}`
+          `${resolvedTarget.targetCategory} (${resolvedTarget.contentType}), crawlStatus=${resolvedTarget.crawlStatus}`
       )
 
       return {
         resolved: true,
         shouldRetry: false,
-        retryCount: target.retryCount
+        retryCount: resolvedTarget.retryCount
       }
     }
 
     if (result.status === 'not_found') {
-      target.retryCount++
+      resolvedTarget.retryCount++
 
-      if (target.retryCount >= maxRetries) {
-        target.status = ResolutionStatus.NOT_FOUND
+      if (resolvedTarget.retryCount >= maxRetries) {
+        resolvedTarget.status = ResolutionStatus.NOT_FOUND
         this.logger.warn(
           `Target ${transactionId} marked as not found ` +
-            `after ${target.retryCount} attempts`
+            `after ${resolvedTarget.retryCount} attempts`
         )
       } else {
-        target.status = ResolutionStatus.PENDING
+        resolvedTarget.status = ResolutionStatus.PENDING
         this.logger.log(
           `Target ${transactionId} not found, ` +
-            `retry ${target.retryCount}/${maxRetries}`
+            `retry ${resolvedTarget.retryCount}/${maxRetries}`
         )
       }
 
-      await this.resolvedTargetRepository.save(target)
+      await this.resolvedTargetRepository.save(resolvedTarget)
 
       return {
         resolved: false,
-        shouldRetry: target.retryCount < maxRetries,
-        retryCount: target.retryCount
+        shouldRetry: resolvedTarget.retryCount < maxRetries,
+        retryCount: resolvedTarget.retryCount
       }
     }
 

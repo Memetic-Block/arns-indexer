@@ -4,10 +4,15 @@ import { ConfigService } from '@nestjs/config'
 import { Job, Queue } from 'bullmq'
 import { InjectQueue } from '@nestjs/bullmq'
 
-import { AntTargetResolutionService } from '../../arns/ant-target-resolution.service'
+import {
+  AntTargetResolutionService,
+  UnresolvedTarget
+} from '../../arns/ant-target-resolution.service'
 
 export interface ResolveTargetJobData {
   transactionId: string
+  arnsName?: string
+  undername?: string
 }
 
 @Processor('ant-target-resolution-queue')
@@ -134,22 +139,22 @@ export class TargetResolutionQueue extends WorkerHost {
 
       for (const chunk of chunks) {
         const results = await Promise.allSettled(
-          chunk.map(async (transactionId) => {
+          chunk.map(async (target) => {
             const result = await this.targetResolutionService.processTarget(
-              transactionId,
+              target,
               this.maxRetries
             )
-            return { transactionId, result }
+            return { target, result }
           })
         )
 
         for (const settledResult of results) {
           if (settledResult.status === 'fulfilled') {
-            const { transactionId, result } = settledResult.value
+            const { target, result } = settledResult.value
             if (result.resolved) {
               totalResolved++
             } else if (result.shouldRetry) {
-              await this.queueRetryJob(transactionId)
+              await this.queueRetryJob(target)
               totalQueuedRetry++
             } else {
               totalFailed++
@@ -189,13 +194,19 @@ export class TargetResolutionQueue extends WorkerHost {
   }
 
   private async processRetryTarget(data: ResolveTargetJobData): Promise<void> {
-    const { transactionId } = data
+    const { transactionId, arnsName, undername } = data
 
     this.logger.log(`Retrying resolution for target ${transactionId}`)
 
+    const target: UnresolvedTarget = {
+      transactionId,
+      arnsName: arnsName || '',
+      undername: undername || ''
+    }
+
     try {
       const result = await this.targetResolutionService.processTarget(
-        transactionId,
+        target,
         this.maxRetries
       )
 
@@ -205,7 +216,7 @@ export class TargetResolutionQueue extends WorkerHost {
         )
       } else if (result.shouldRetry) {
         // Queue another delayed retry
-        await this.queueRetryJob(transactionId)
+        await this.queueRetryJob(target)
         this.logger.log(
           `Target ${transactionId} still not found, ` +
             `queued retry ${result.retryCount + 1}/${this.maxRetries}`
@@ -225,10 +236,14 @@ export class TargetResolutionQueue extends WorkerHost {
     }
   }
 
-  private async queueRetryJob(transactionId: string): Promise<void> {
+  private async queueRetryJob(target: UnresolvedTarget): Promise<void> {
     await this.resolutionQueue.add(
       TargetResolutionQueue.JOB_RETRY_TARGET_RESOLUTION,
-      { transactionId },
+      {
+        transactionId: target.transactionId,
+        arnsName: target.arnsName,
+        undername: target.undername
+      },
       {
         delay: this.retryDelayMs,
         removeOnComplete: true,
