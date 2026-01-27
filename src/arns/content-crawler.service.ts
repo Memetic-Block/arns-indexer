@@ -420,7 +420,9 @@ export class ContentCrawlerService {
   }
 
   /**
-   * Extract manifest-relative paths from sitemap entries
+   * Extract manifest-relative paths from sitemap entries.
+   * Sitemaps may use various URLs (ARNS domains, gateway URLs, etc.)
+   * but we only care about the path portion for manifest lookup.
    */
   public extractManifestPaths(
     entries: SitemapEntry[],
@@ -431,16 +433,22 @@ export class ContentCrawlerService {
     for (const entry of entries) {
       try {
         const entryUrl = new URL(entry.loc)
-        const baseUrl = new URL(manifestBaseUrl)
-
-        // Only include paths from the same origin
-        if (entryUrl.origin === baseUrl.origin) {
-          paths.push(entryUrl.pathname)
+        // Extract just the pathname regardless of origin
+        // Sitemap might use ARNS domain, gateway URL, or other origins
+        const pathname = entryUrl.pathname
+        if (pathname && pathname !== '/') {
+          paths.push(pathname)
+        } else if (pathname === '/') {
+          // Root path typically maps to index
+          paths.push('/')
         }
       } catch {
         // If it's already a relative path
         if (entry.loc.startsWith('/')) {
           paths.push(entry.loc)
+        } else if (!entry.loc.includes('://')) {
+          // Plain path without leading slash
+          paths.push('/' + entry.loc)
         }
       }
     }

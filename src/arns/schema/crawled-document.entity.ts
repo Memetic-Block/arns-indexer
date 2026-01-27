@@ -21,6 +21,14 @@ export class CrawledDocument {
   @Index()
   transactionId: string
 
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  arnsName: string | null
+
+  @Column({ type: 'varchar', nullable: true })
+  @Index()
+  undername: string | null
+
   @ManyToOne(() => AntResolvedTarget, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'transactionId', referencedColumnName: 'transactionId' })
   resolvedTarget: AntResolvedTarget

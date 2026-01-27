@@ -71,10 +71,15 @@ When enabled, resolves ANT transaction targets to determine their content type (
 ### Content Crawling
 When enabled, crawls text/HTML content from resolved ANT targets and stores parsed documents. Supports manifest-aware crawling with robots.txt/sitemap.xml support.
 
+**Crawl Strategy:**
+1. Fetch and parse `robots.txt` (if exists) - respects disallow rules
+2. If `sitemap.xml` exists (or referenced in robots.txt), use it as the source of crawl targets
+3. If no sitemap, crawl `index.html` and follow links recursively up to `CRAWL_MAX_DEPTH`
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CRAWL_ANTS_ENABLED` | `false` | Enable content crawling after target resolution |
-| `CRAWL_MAX_DEPTH` | `10` | Max link-following depth within manifests |
+| `CRAWL_MAX_DEPTH` | `10` | Max link-following depth (only used when no sitemap) |
 | `CRAWL_MAX_BODY_SIZE` | `5242880` (5MB) | Max body size in bytes, truncate if exceeded |
 | `CRAWL_MAX_TITLE_SIZE` | `1024` | Max title size in bytes |
 | `CRAWL_MAX_HEADINGS_COUNT` | `25` | Max headings to extract per document |

@@ -32,6 +32,8 @@ interface ManifestCrawlContext {
   robotsTxtRules: RobotsTxtRules | null
   baseUrl: string
   visitedPaths: Set<string>
+  arnsName: string | null
+  undername: string | null
 }
 
 @Processor('ant-crawl-queue')
@@ -115,6 +117,47 @@ export class CrawlQueue extends WorkerHost {
     if (filter === null) return 'none'
     if (filter === '*') return '*'
     return `[${filter.length} names]`
+  }
+
+  /**
+   * Build a wayfinder-format URL for a crawled document.
+   * Format: ar://{arnsName}/{path} or ar://{undername}_{arnsName}/{path}
+   * Drops index.html from paths (e.g., about/index.html -> about)
+   */
+  private buildWayfinderUrl(
+    arnsName: string | null,
+    undername: string | null,
+    manifestPath: string | null
+  ): string {
+    // Build the base: ar://{name} or ar://{undername}_{name}
+    let base = 'ar://'
+    if (arnsName) {
+      if (undername && undername !== '@') {
+        base += `${undername}_${arnsName}`
+      } else {
+        base += arnsName
+      }
+    } else {
+      base += 'unknown'
+    }
+
+    // Normalize the path
+    if (!manifestPath) {
+      return base
+    }
+
+    let path = manifestPath
+    // Remove index.html suffix for cleaner URLs
+    if (path.endsWith('/index.html')) {
+      path = path.slice(0, -'/index.html'.length)
+    } else if (path === 'index.html') {
+      path = ''
+    }
+
+    if (path) {
+      return `${base}/${path}`
+    }
+    return base
   }
 
   private parseIntConfig(key: string, defaultValue: number): number {
@@ -330,8 +373,10 @@ export class CrawlQueue extends WorkerHost {
     // Save crawled document
     await this.saveCrawledDocument({
       transactionId,
+      arnsName: target.arnsName,
+      undername: target.undername,
       manifestPath: null,
-      url,
+      url: this.buildWayfinderUrl(target.arnsName, target.undername, null),
       contentType,
       depth: 0,
       ...parsed
@@ -349,6 +394,11 @@ export class CrawlQueue extends WorkerHost {
 
   /**
    * Crawl a manifest target
+   * 
+   * Strategy:
+   * 1. Fetch and parse robots.txt (if exists) - respect its crawl rules
+   * 2. If sitemap.xml exists, use it as the source of crawl targets
+   * 3. If no sitemap.xml, crawl index.html and follow links recursively
    */
   private async crawlManifest(target: AntResolvedTarget): Promise<void> {
     const { transactionId } = target
@@ -371,10 +421,12 @@ export class CrawlQueue extends WorkerHost {
       manifest,
       robotsTxtRules: null,
       baseUrl,
-      visitedPaths: new Set<string>()
+      visitedPaths: new Set<string>(),
+      arnsName: target.arnsName,
+      undername: target.undername
     }
 
-    // Try to fetch and parse robots.txt
+    // Step 1: Fetch and parse robots.txt (if exists)
     let robotsTxt: string | null = null
     if (manifest.paths['robots.txt']) {
       try {
@@ -386,13 +438,21 @@ export class CrawlQueue extends WorkerHost {
             this.contentCrawlerService.parseRobotsTxt(robotsTxt)
           if (validation.isValid && validation.rules) {
             context.robotsTxtRules = validation.rules
+            this.logger.debug(
+              `Loaded robots.txt for ${transactionId}: ` +
+                `${validation.rules.disallowedPaths.length} disallowed paths, ` +
+                `${validation.rules.sitemapUrls.length} sitemap URLs`
+            )
 
-            // Also save robots.txt as a crawled document
+            // Save robots.txt as a crawled document
+            context.visitedPaths.add('robots.txt')
             const robotsParsed = this.contentCrawlerService.parseText(robotsTxt)
             await this.saveCrawledDocument({
               transactionId,
+              arnsName: target.arnsName,
+              undername: target.undername,
               manifestPath: 'robots.txt',
-              url: robotsUrl,
+              url: this.buildWayfinderUrl(target.arnsName, target.undername, 'robots.txt'),
               contentType: 'text/plain',
               depth: 0,
               ...robotsParsed
@@ -406,8 +466,9 @@ export class CrawlQueue extends WorkerHost {
       }
     }
 
-    // Try to fetch and parse sitemap.xml
+    // Step 2: Try to fetch and parse sitemap.xml
     let sitemapXml: string | null = null
+    let hasSitemap = false
     const sitemapPaths = ['sitemap.xml']
 
     // Add sitemap URLs from robots.txt
@@ -423,6 +484,9 @@ export class CrawlQueue extends WorkerHost {
       }
     }
 
+    // Collect all sitemap entries
+    const sitemapTargets: string[] = []
+
     for (const sitemapPath of sitemapPaths) {
       if (manifest.paths[sitemapPath]) {
         try {
@@ -434,40 +498,66 @@ export class CrawlQueue extends WorkerHost {
               this.contentCrawlerService.parseSitemapXml(sitemapXml)
 
             // Save sitemap.xml as a crawled document
+            context.visitedPaths.add(sitemapPath)
             const sitemapParsed =
               this.contentCrawlerService.parseText(sitemapXml)
             await this.saveCrawledDocument({
               transactionId,
+              arnsName: target.arnsName,
+              undername: target.undername,
               manifestPath: sitemapPath,
-              url: sitemapUrl,
+              url: this.buildWayfinderUrl(target.arnsName, target.undername, sitemapPath),
               contentType: 'application/xml',
               depth: 0,
               ...sitemapParsed
             })
 
-            // Queue sitemap entries for crawling
-            if (validation.isValid) {
+            // Collect sitemap entries
+            if (validation.isValid && validation.entries.length > 0) {
+              hasSitemap = true
               const manifestPaths =
                 this.contentCrawlerService.extractManifestPaths(
                   validation.entries,
                   baseUrl
                 )
+              this.logger.debug(
+                `Sitemap ${sitemapPath} for ${transactionId}: ` +
+                  `${validation.entries.length} entries -> ${manifestPaths.length} paths: ${manifestPaths.join(', ')}`
+              )
               for (const path of manifestPaths) {
-                const normalizedPath = path.replace(/^\//, '')
+                let normalizedPath = path.replace(/^\//, '')
+                
+                // Root path maps to manifest index
+                if (normalizedPath === '' && manifest.index?.path) {
+                  normalizedPath = manifest.index.path
+                }
+                
+                // Try to find the path in manifest, also check for directory index pattern
+                // e.g., "about" -> "about/index.html"
+                let manifestPath = normalizedPath
+                if (!manifest.paths[manifestPath]) {
+                  // Try with /index.html suffix for directory-style URLs
+                  const withIndex = normalizedPath + '/index.html'
+                  if (manifest.paths[withIndex]) {
+                    manifestPath = withIndex
+                  }
+                }
+                
                 if (
-                  manifest.paths[normalizedPath] &&
-                  !context.visitedPaths.has(normalizedPath)
+                  manifest.paths[manifestPath] &&
+                  !sitemapTargets.includes(manifestPath)
                 ) {
-                  context.visitedPaths.add(normalizedPath)
-                  await this.queueManifestPathCrawl(
-                    transactionId,
-                    normalizedPath,
-                    1
+                  sitemapTargets.push(manifestPath)
+                } else if (!manifest.paths[manifestPath]) {
+                  this.logger.debug(
+                    `Sitemap path "${normalizedPath}" not found in manifest for ${transactionId}`
                   )
                 }
               }
+              this.logger.debug(
+                `Loaded ${sitemapPath} for ${transactionId}: ${sitemapTargets.length} crawl targets`
+              )
             }
-            break
           }
         } catch (error) {
           this.logger.warn(
@@ -483,7 +573,8 @@ export class CrawlQueue extends WorkerHost {
       { robotsTxt, sitemapXml }
     )
 
-    // Crawl the index page
+    // Step 3: Crawl index and follow links, plus any additional sitemap entries
+    // Always start with index and follow links recursively
     if (manifest.index?.path) {
       const indexPath = manifest.index.path
       context.visitedPaths.add(indexPath)
@@ -496,6 +587,29 @@ export class CrawlQueue extends WorkerHost {
         context,
         config.maxDepth
       )
+    }
+
+    // Additionally crawl any sitemap entries not already visited through link following
+    if (hasSitemap && sitemapTargets.length > 0) {
+      const unvisitedSitemapTargets = sitemapTargets.filter(
+        (p) => !context.visitedPaths.has(p)
+      )
+      if (unvisitedSitemapTargets.length > 0) {
+        this.logger.debug(
+          `Crawling ${unvisitedSitemapTargets.length} additional sitemap entries for ${transactionId}`
+        )
+        for (const targetPath of unvisitedSitemapTargets) {
+          context.visitedPaths.add(targetPath)
+          await this.crawlManifestPath(
+            transactionId,
+            manifest,
+            targetPath,
+            1,
+            context,
+            config.maxDepth
+          )
+        }
+      }
     }
 
     // Update target status
@@ -603,8 +717,10 @@ export class CrawlQueue extends WorkerHost {
       // Save crawled document
       await this.saveCrawledDocument({
         transactionId,
+        arnsName: context.arnsName,
+        undername: context.undername,
         manifestPath,
-        url: pathUrl,
+        url: this.buildWayfinderUrl(context.arnsName, context.undername, manifestPath),
         contentType,
         depth,
         ...parsed
@@ -666,7 +782,9 @@ export class CrawlQueue extends WorkerHost {
       manifest,
       robotsTxtRules,
       baseUrl,
-      visitedPaths: new Set<string>([manifestPath])
+      visitedPaths: new Set<string>([manifestPath]),
+      arnsName: target.arnsName,
+      undername: target.undername
     }
 
     await this.crawlManifestPath(
@@ -707,6 +825,8 @@ export class CrawlQueue extends WorkerHost {
    */
   private async saveCrawledDocument(data: {
     transactionId: string
+    arnsName: string | null
+    undername: string | null
     manifestPath: string | null
     url: string
     contentType: string | null
@@ -732,6 +852,8 @@ export class CrawlQueue extends WorkerHost {
       await this.crawledDocumentRepository.update(
         { id: existing.id },
         {
+          arnsName: data.arnsName,
+          undername: data.undername,
           url: data.url,
           title: data.title,
           body: data.body,
@@ -749,6 +871,8 @@ export class CrawlQueue extends WorkerHost {
     } else {
       await this.crawledDocumentRepository.save({
         transactionId: data.transactionId,
+        arnsName: data.arnsName,
+        undername: data.undername,
         manifestPath: data.manifestPath,
         url: data.url,
         title: data.title,

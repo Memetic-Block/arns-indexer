@@ -15,6 +15,7 @@ import { AddIndexesForOwnerAndControllerQueries1764008201563 } from './migration
 import { AddArchiveTables1768003446886 } from './migrations/1768003446886-AddArchiveTables'
 import { CreateAntResolvedTargetTable1769040000000 } from './migrations/1769040000000-CreateAntResolvedTargetTable'
 import { AddCrawlStatusAndCrawledDocument1769500000000 } from './migrations/1769500000000-AddCrawlStatusAndCrawledDocument'
+import { AddArnsNameToResolvedTargetAndCrawledDocument1769535332651 } from './migrations/1769535332651-AddArnsNameToResolvedTargetAndCrawledDocument'
 
 @Module({
   imports: [
@@ -115,7 +116,8 @@ import { AddCrawlStatusAndCrawledDocument1769500000000 } from './migrations/1769
             AddIndexesForOwnerAndControllerQueries1764008201563,
             AddArchiveTables1768003446886,
             CreateAntResolvedTargetTable1769040000000,
-            AddCrawlStatusAndCrawledDocument1769500000000
+            AddCrawlStatusAndCrawledDocument1769500000000,
+            AddArnsNameToResolvedTargetAndCrawledDocument1769535332651
           ],
           migrationsRun:
             config.get<string>('DB_MIGRATIONS_RUN', { infer: true }) === 'true'
