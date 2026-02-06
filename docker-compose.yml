@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
 
-  postgres:
+  postgres-mounted:
     image: postgres:18
     environment:
       POSTGRES_USER: ${DB_USERNAME}
@@ -26,7 +26,7 @@ services:
     volumes:
       - postgresdata:/var/lib/postgresql/18/docker
 
-  postgres-ephemeral:
+  postgres:
     image: postgres:18
     environment:
       POSTGRES_USER: ${DB_USERNAME}

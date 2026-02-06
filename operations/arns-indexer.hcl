@@ -38,10 +38,8 @@ job "arns-indexer" {
         REDIS_MODE="standalone"
         ANT_TARGET_BLACKLIST_FILE="/usr/src/app/data/ant-target-blacklist.txt"
         ANT_PROCESS_ID_BLACKLIST_FILE="/usr/src/app/data/ant-process-id-blacklist.txt"
-        ARNS_CRAWL_GATEWAY="arweave.net"
         DO_CLEAN="true"
         DB_MIGRATIONS_RUN="true"
-        ENABLE_TARGET_RESOLUTION="true"
       }
 
       template {
@@ -56,9 +54,6 @@ job "arns-indexer" {
         {{- end }}
         {{- range service "arns-indexer-cu" }}
         CU_URL="http://{{ .Address }}:{{ .Port }}"
-        {{- end }}
-        {{- range service "frostor-ario-node-core" }}
-        ARNS_CRAWL_GATEWAY="http://{{ .Address }}:{{ .Port }}"
         {{- end }}
         EOF
         env = true

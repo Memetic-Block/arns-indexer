@@ -11,8 +11,7 @@ import { ConfigService } from '@nestjs/config'
 import { InjectRepository } from '@nestjs/typeorm'
 import { connect } from '@permaweb/aoconnect'
 import { readFileSync } from 'fs'
-import * as _ from 'lodash'
-import { Repository, Not, IsNull, And, In, LessThan, DataSource } from 'typeorm'
+import { Repository, In, LessThan, DataSource } from 'typeorm'
 
 import { AntRecord } from './schema/ant-record.entity'
 import { AntRecordArchive } from './schema/ant-record-archive.entity'
@@ -25,7 +24,6 @@ export class ArnsService {
   private readonly ario: AoARIORead
   private readonly antTargetBlacklist: string[]
   private readonly antProcessIdBlacklist: string[]
-  private readonly arnsCrawlGateway: string
   private readonly cuUrl: string
   private readonly skipExpiredRecords: boolean
   private readonly discoveryWhitelist: string[] | '*' | null
@@ -35,7 +33,6 @@ export class ArnsService {
     private readonly config: ConfigService<{
       ANT_TARGET_BLACKLIST_FILE: string
       ANT_PROCESS_ID_BLACKLIST_FILE: string
-      ARNS_CRAWL_GATEWAY: string
       CU_URL: string
       SKIP_EXPIRED_RECORDS: string
       ARNS_DISCOVERY_WHITELIST: string
@@ -72,13 +69,6 @@ export class ArnsService {
         })
       })
     })
-
-    this.arnsCrawlGateway = this.config.get<string>(
-      'ARNS_CRAWL_GATEWAY',
-      'arweave.net',
-      { infer: true }
-    )
-    this.logger.log(`Using ArNS crawl gateway: ${this.arnsCrawlGateway}`)
 
     const antTargetBlacklistFilePath = this.config.get<string>(
       'ANT_TARGET_BLACKLIST_FILE',
@@ -470,59 +460,5 @@ export class ArnsService {
     )
 
     return result
-  }
-
-  public async legacy_generateCrawlDomainsConfigFile() {
-    this.logger.log('Generating crawl domains config file from database')
-
-    try {
-      const where = {}
-      if (this.antTargetBlacklist.length > 0) {
-        where['transactionId'] = And(
-          Not(IsNull()),
-          Not(In(this.antTargetBlacklist))
-        )
-      } else {
-        where['transactionId'] = Not(IsNull())
-      }
-      if (this.antProcessIdBlacklist.length > 0) {
-        where['processId'] = Not(In(this.antProcessIdBlacklist))
-      }
-      const records = await this.antRecordsRepository.find({ where })
-
-      this.logger.log(
-        `Found [${records.length}] ArNS records with valid primary targets`
-      )
-
-      let crawlConfigDomains = 'domains:\n'
-      _.uniq(
-        records
-          .filter(
-            (record) =>
-              !record.undername.includes(' ') &&
-              !record.undername.includes('+') &&
-              !record.name.includes(' ') &&
-              !record.name.includes('+')
-          )
-          .map((record) => {
-            const subdomain =
-              record.undername === '@'
-                ? record.name
-                : `${record.undername}_${record.name}`
-            return `https://${subdomain}.${this.arnsCrawlGateway}`.toLowerCase()
-          })
-      ).forEach((url) => {
-        crawlConfigDomains += `  - url: ${url}\n`
-      })
-
-      this.logger.log(
-        `Generated crawl domains config with [${records.length}] domains`
-      )
-
-      return crawlConfigDomains
-    } catch (error) {
-      this.logger.error('Failed to generate crawl domains config file', error)
-      throw error
-    }
   }
 }

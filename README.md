@@ -12,8 +12,6 @@ Well look no further!  ArNS Indexer is a microservice built on the NestJS framew
 1) Fetch all ArNS records
 2) Fetch all ANT records (& controllers)
 3) Archive expired ArNS and ANT lease records
-4) Resolve ANT targets to determine content type (manifest, AO process, or transaction)
-5) Crawl text/HTML content from resolved targets (optional)
 
 ArNS Indexer serves as a data bridge between legacy AO and hyper-aos while ArNS processes remain accessible only on legacynet.  Eventually, this will be replaced by dedicated hyper-aos processes or a hyperbeam device.
 
@@ -56,37 +54,6 @@ $ npm run start:prod
 |----------|---------|-------------|
 | `CU_URL` | `https://cu.ardrive.io` | The URL for the Compute Unit to resolve records. It is strongly encouraged to run your own CU to avoid spamming public CUs and ensure better control over resolution behavior (e.g., snapshots) |
 
-### Target Resolution
-When enabled, resolves ANT transaction targets to determine their content type (manifest, AO process, or transaction) and validates manifests.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ENABLE_TARGET_RESOLUTION` | `false` | Enable ANT target resolution after record discovery |
-| `ARNS_CRAWL_GATEWAY` | `arweave.net` | Arweave gateway for fetching transaction tags and content |
-| `MAX_RESOLVE_RETRIES` | `3` | Max retry attempts for failed resolutions |
-| `RESOLVE_RETRY_DELAY_MS` | `7200000` (2 hours) | Delay between retry attempts |
-| `RESOLUTION_BATCH_SIZE` | `100` | Number of targets to process per batch |
-| `RESOLUTION_CONCURRENCY` | `2` | Concurrent resolution operations |
-
-### Content Crawling
-When enabled, crawls text/HTML content from resolved ANT targets and stores parsed documents. Supports manifest-aware crawling with robots.txt/sitemap.xml support.
-
-**Crawl Strategy:**
-1. Fetch and parse `robots.txt` (if exists) - respects disallow rules
-2. If `sitemap.xml` exists (or referenced in robots.txt), use it as the source of crawl targets
-3. If no sitemap, crawl `index.html` and follow links recursively up to `CRAWL_MAX_DEPTH`
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CRAWL_ANTS_ENABLED` | `false` | Enable content crawling after target resolution |
-| `CRAWL_MAX_DEPTH` | `10` | Max link-following depth (only used when no sitemap) |
-| `CRAWL_MAX_BODY_SIZE` | `5242880` (5MB) | Max body size in bytes, truncate if exceeded |
-| `CRAWL_MAX_TITLE_SIZE` | `1024` | Max title size in bytes |
-| `CRAWL_MAX_HEADINGS_COUNT` | `25` | Max headings to extract per document |
-| `CRAWL_MAX_LINKS_COUNT` | `25` | Max links to index per document |
-| `CRAWL_BATCH_SIZE` | `50` | Number of targets to crawl per batch |
-| `CRAWL_CONCURRENCY` | `2` | Concurrent crawl operations |
-
 ### ARNS Name Filtering
 Filter ARNS names processed by each queue stage independently. Useful for restricting indexing to specific names or excluding problematic ones.
 
@@ -100,24 +67,14 @@ Filter ARNS names processed by each queue stage independently. Useful for restri
 |----------|---------|-------------|
 | `ARNS_DISCOVERY_WHITELIST` | _(empty)_ | ARNS names to include during discovery (empty = all) |
 | `ARNS_DISCOVERY_BLACKLIST` | _(empty)_ | ARNS names to exclude during discovery |
-| `TARGET_RESOLUTION_WHITELIST` | _(empty)_ | ARNS names to include during target resolution |
-| `TARGET_RESOLUTION_BLACKLIST` | _(empty)_ | ARNS names to exclude during target resolution |
-| `CRAWL_WHITELIST` | _(empty)_ | ARNS names to include during content crawling |
-| `CRAWL_BLACKLIST` | _(empty)_ | ARNS names to exclude during content crawling |
 
 **Examples:**
 ```bash
 # Only index these specific names
 ARNS_DISCOVERY_WHITELIST=ardrive,arweave,arns
 
-# Exclude problematic names from crawling
-CRAWL_BLACKLIST=spam-site,broken-manifest
-
-# Only crawl a single name for testing
-CRAWL_WHITELIST=my-test-site
-
-# Disable all crawling via blacklist
-CRAWL_BLACKLIST=*
+# Exclude specific names
+ARNS_DISCOVERY_BLACKLIST=spam-site,broken-ant
 ```
 
 ### Redis
@@ -187,8 +144,7 @@ This will generate a new migration in [src/migrations](./src/migrations) prepend
 ```typescript
 ...
 migrations: [
-  CreateArnsAndAntRecordsTables1761260838990,
-  AddControllersToAntRecordTable1761423495919,
+  InitialSchema1738800000000,
   <MigrationName<Timestamp>>
 ]
 ...
@@ -200,8 +156,6 @@ The discovery queue runs in this order:
 1. `discover-arns-records` - Fetches and upserts ArNS records from the network
 2. `discover-ant-records` - Fetches and upserts ANT records for each ArNS record
 3. `cleanup-expired-records` - Archives and deletes expired lease records
-4. `resolve-ant-targets` - (if enabled) Resolves ANT targets to determine content type
-5. `crawl-ant-targets` - (if enabled) Crawls text/HTML content from resolved targets
 
 The queue then re-queues the next discovery cycle.
 
@@ -222,45 +176,6 @@ The archive tables contain all original fields plus:
 - `archiveReason` - Reason for archival (e.g., `'expired'`)
 - `originalId` - The original record's ID
 - `originalCreatedAt` / `originalUpdatedAt` - Original timestamps
-
-## ANT Target Resolution
-
-When `ENABLE_TARGET_RESOLUTION=true`, the indexer resolves each ANT transaction ID to determine:
-
-- **Content Type** - The `Content-Type` tag from the transaction
-- **Target Category** - One of:
-  - `manifest` - Arweave path manifest (`application/x.arweave-manifest+json`)
-  - `ao_process` - AO process (has `Data-Protocol: ao` and `Type: Process` tags)
-  - `transaction` - Regular Arweave transaction
-- **Manifest Validation** - For manifests, validates structure and checks for index/fallback paths
-
-Resolution results are stored in the `ant_resolved_target` table with retry logic for transient failures.
-
-## Content Crawling
-
-When `CRAWL_ANTS_ENABLED=true`, the indexer crawls content from resolved targets that are:
-- Text content (`text/*`, `text/html`, `application/xhtml+xml`)
-- Valid manifests with an index path
-
-### Crawled Document Schema
-
-Crawled documents are stored with:
-- `title` - Document title from `<title>` tag
-- `body` - Extracted body text (scripts/styles removed)
-- `metaDescription` - HTML meta description
-- `metaKeywords` - HTML meta keywords
-- `headings` - Array of h1-h6 heading content
-- `links` - Array of extracted links
-- `contentHash` - SHA-256 hash for deduplication
-
-### Manifest Crawling
-
-For manifest targets, the crawler:
-1. Fetches and parses `robots.txt` (if present) to determine allowed paths
-2. Fetches and parses `sitemap.xml` (if present) to discover pages
-3. Crawls the index page and follows internal links up to `CRAWL_MAX_DEPTH`
-4. Respects `robots.txt` rules when following links
-5. Stores `robots.txt` and `sitemap.xml` content on the target for caching
 
 ## Future Work
 1) Runtime cluster support

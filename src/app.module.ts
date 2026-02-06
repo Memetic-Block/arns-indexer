@@ -9,13 +9,7 @@ import { AppService } from './app.service'
 import { ArnsModule } from './arns/arns.module'
 import { TasksModule } from './tasks/tasks.module'
 import { dbEntities } from './db-entities'
-import { CreateArnsAndAntRecordsTables1761260838990 } from './migrations/1761260838990-CreateArnsAndAntRecordsTables'
-import { AddControllersToAntRecordTable1761423495919 } from './migrations/1761423495919-AddControllersToAntRecordTable'
-import { AddIndexesForOwnerAndControllerQueries1764008201563 } from './migrations/1764008201563-AddIndexesForOwnerAndControllerQueries'
-import { AddArchiveTables1768003446886 } from './migrations/1768003446886-AddArchiveTables'
-import { CreateAntResolvedTargetTable1769040000000 } from './migrations/1769040000000-CreateAntResolvedTargetTable'
-import { AddCrawlStatusAndCrawledDocument1769500000000 } from './migrations/1769500000000-AddCrawlStatusAndCrawledDocument'
-import { AddArnsNameToResolvedTargetAndCrawledDocument1769535332651 } from './migrations/1769535332651-AddArnsNameToResolvedTargetAndCrawledDocument'
+import { InitialSchema1738800000000 } from './migrations/1738800000000-InitialSchema'
 
 @Module({
   imports: [
@@ -145,15 +139,7 @@ import { AddArnsNameToResolvedTargetAndCrawledDocument1769535332651 } from './mi
           database: dbName,
           entities: dbEntities,
           synchronize,
-          migrations: [
-            CreateArnsAndAntRecordsTables1761260838990,
-            AddControllersToAntRecordTable1761423495919,
-            AddIndexesForOwnerAndControllerQueries1764008201563,
-            AddArchiveTables1768003446886,
-            CreateAntResolvedTargetTable1769040000000,
-            AddCrawlStatusAndCrawledDocument1769500000000,
-            AddArnsNameToResolvedTargetAndCrawledDocument1769535332651
-          ],
+          migrations: [InitialSchema1738800000000],
           migrationsRun
         }
       }
